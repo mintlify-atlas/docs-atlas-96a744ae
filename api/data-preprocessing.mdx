@@ -1,0 +1,310 @@
+---
+title: 'Data Preprocessing API'
+description: 'API reference for data preprocessing pipeline that prepares lead and offer data for model training'
+---
+
+## Overview
+
+The data preprocessing module (`data_preprocessing.py`) performs feature engineering, data cleaning, and transformation on raw lead and offer datasets. It executes as a script and generates cleaned intermediate and processed datasets.
+
+## Input Data
+
+The preprocessing pipeline expects two CSV files in the `data/raw/` directory:
+
+<ParamField path="leads.csv" type="CSV file" required>
+  Raw leads dataset containing:
+  - Id: Lead identifier
+  - First Name: Lead first name
+  - Use Case: Lead use case
+  - Created Date: Lead creation date
+  - Status: Lead status
+  - Converted: Conversion flag
+  - Additional lead attributes
+</ParamField>
+
+<ParamField path="offers.csv" type="CSV file" required>
+  Raw offers dataset containing:
+  - Id: Offer identifier (matches lead Id)
+  - Use Case: Offer use case
+  - Created Date: Offer creation date
+  - Close Date: Offer close date
+  - Status: Offer status (Closed Won, Closed Lost, etc.)
+  - Price: Offer price
+  - Discount code: Discount applied
+  - Loss Reason: Reason for lost deals
+  - Source: Lead source
+  - City: City location
+  - Discarded/Nurturing Reason: Reason for discarding
+  - Acquisition Campaign: Marketing campaign
+</ParamField>
+
+---
+
+## Processing Steps
+
+### 1. Data Loading
+
+```python
+import pandas as pd
+
+leads_data = pd.read_csv("data/raw/leads.csv")
+offers_data = pd.read_csv("data/raw/offers.csv")
+```
+
+### 2. Initial Cleaning (Leads Dataset)
+
+**Null Value Removal:**
+```python
+# Delete rows with null values in the 'Id' column
+leads_data_cleaned = leads_data.dropna(subset=['Id'])
+```
+
+**Column Removal:**
+Drops redundant and irrelevant columns from the leads dataset:
+- `First Name` - Irrelevant for prediction
+- `Use Case` - Duplicate of offers dataset column
+- `Created Date` - Duplicate of offers dataset column
+- `Status` - Superseded by offers status
+- `Converted` - Superseded by offers status
+
+```python
+leads_data_cleaned = leads_data_cleaned.drop(
+    ['First Name', 'Use Case', 'Created Date', 'Status', 'Converted'], 
+    axis=1
+)
+```
+
+**Output:** `data/interim/leads_data_cleaned.csv`
+
+### 3. Dataset Merging
+
+Merges offers and cleaned leads data using left join on the `Id` column:
+
+```python
+full_dataset = pd.merge(offers_data, leads_data_cleaned, on='Id', how='left')
+```
+
+**Output:** `data/interim/full_dataset.csv`
+
+### 4. Feature Engineering
+
+**Remove High-Missing Columns:**
+Drops columns with >80% missing values and the Id column:
+- `Id` - Identifier not needed for training
+- `Discarded/Nurturing Reason` - >80% null values
+- `Acquisition Campaign` - >80% null values
+
+```python
+full_dataset_preprocessed = full_dataset.drop(
+    ['Id', 'Discarded/Nurturing Reason', 'Acquisition Campaign'], 
+    axis=1
+)
+```
+
+**Date Parsing:**
+Converts date strings to datetime objects:
+
+```python
+full_dataset_preprocessed['Created Date'] = pd.to_datetime(
+    full_dataset_preprocessed['Created Date'], 
+    format="%Y-%m-%d"
+)
+full_dataset_preprocessed['Close Date'] = pd.to_datetime(
+    full_dataset_preprocessed['Close Date'], 
+    format="%Y-%m-%d"
+)
+```
+
+### 5. Missing Value Imputation
+
+**Loss Reason Column:**
+Context-aware filling based on Status:
+
+```python
+import numpy as np
+
+# For 'Closed Lost' with null Loss Reason, fill with 'no response'
+full_dataset_preprocessed['Loss Reason'] = np.where(
+    (full_dataset_preprocessed['Status'] == 'Closed Lost') & 
+    (full_dataset_preprocessed['Loss Reason'].isnull()), 
+    'no response', 
+    full_dataset_preprocessed['Loss Reason']
+)
+
+# For 'Closed Won', fill with mode of 'Closed Won' Loss Reasons
+mode_closed_won = full_dataset_preprocessed.loc[
+    full_dataset_preprocessed['Status'] == 'Closed Won', 
+    'Loss Reason'
+].mode()[0]
+full_dataset_preprocessed['Loss Reason'].fillna(mode_closed_won, inplace=True)
+```
+
+**General Imputation:**
+Fills remaining missing values by data type:
+
+```python
+for col in full_dataset_preprocessed.columns:
+    if full_dataset_preprocessed[col].dtype in ['object', 'datetime64[ns]']:
+        # Fill categorical/datetime with mode
+        full_dataset_preprocessed[col] = full_dataset_preprocessed[col].fillna(
+            full_dataset_preprocessed[col].mode()[0]
+        )
+    elif full_dataset_preprocessed[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+        # Fill numeric with mean
+        full_dataset_preprocessed[col] = full_dataset_preprocessed[col].fillna(
+            full_dataset_preprocessed[col].mean()
+        )
+```
+
+### 6. Date Feature Extraction
+
+Extracts year and month from date columns:
+
+```python
+full_dataset_preprocessed['Created Year'] = full_dataset_preprocessed['Created Date'].dt.year
+full_dataset_preprocessed['Created Month'] = full_dataset_preprocessed['Created Date'].dt.month
+full_dataset_preprocessed['Close Year'] = full_dataset_preprocessed['Close Date'].dt.year
+full_dataset_preprocessed['Close Month'] = full_dataset_preprocessed['Close Date'].dt.month
+
+# Drop original date columns
+full_dataset_preprocessed = full_dataset_preprocessed.drop(
+    ['Created Date', 'Close Date'], 
+    axis=1
+)
+```
+
+### 7. Target Class Mapping
+
+Simplifies the Status column to three classes:
+
+```python
+clase_mapping = {'Closed Won': 'Closed Won', 'Closed Lost': 'Closed Lost'}
+full_dataset_preprocessed['Status'] = full_dataset_preprocessed['Status'].map(
+    clase_mapping
+).fillna('Other')  # All other statuses mapped to 'Other'
+```
+
+### 8. Label Encoding
+
+Encodes all categorical columns to numeric values:
+
+```python
+from sklearn.preprocessing import LabelEncoder
+
+label_encoder = LabelEncoder()
+
+# Get all categorical columns
+categorical_columns = full_dataset_preprocessed.select_dtypes(
+    ['object', 'datetime64[ns]']
+).columns
+categorical_columns = list(set(categorical_columns))
+
+# Apply LabelEncoder to each categorical column
+for column in categorical_columns:
+    if column in full_dataset_preprocessed.columns:
+        full_dataset_preprocessed[column] = label_encoder.fit_transform(
+            full_dataset_preprocessed[column]
+        )
+```
+
+### 9. Final Output
+
+**Output:** `data/processed/full_dataset.csv`
+
+The final processed dataset contains:
+- All numeric features (encoded categorical variables)
+- Extracted temporal features (Created Year/Month, Close Year/Month)
+- Cleaned and imputed values
+- Simplified target variable (Status)
+
+---
+
+## Output Files
+
+<ResponseField name="data/interim/leads_data_cleaned.csv" type="CSV">
+  Cleaned leads data with null Id rows removed and redundant columns dropped
+</ResponseField>
+
+<ResponseField name="data/interim/full_dataset.csv" type="CSV">
+  Merged dataset combining offers and leads data with original values preserved
+</ResponseField>
+
+<ResponseField name="data/processed/full_dataset.csv" type="CSV">
+  Fully processed dataset ready for model training:
+  - No missing values
+  - All categorical features encoded
+  - Date features extracted
+  - Target variable mapped to 3 classes
+</ResponseField>
+
+---
+
+## Running the Preprocessing
+
+The preprocessing script is designed to be executed directly:
+
+```bash
+cd ~/workspace/source
+python src/data/data_preprocessing.py
+```
+
+**Prerequisites:**
+- Raw data files must exist in `data/raw/` directory
+- Required Python packages: pandas, numpy, scikit-learn, matplotlib, seaborn, missingno
+
+**Expected Output:**
+```
+data/interim/leads_data_cleaned.csv (created)
+data/interim/full_dataset.csv (created)
+data/processed/full_dataset.csv (created)
+```
+
+---
+
+## Example: Custom Preprocessing
+
+If you need to adapt the preprocessing for your own data:
+
+```python
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder
+
+# Load your data
+leads = pd.read_csv("data/raw/leads.csv")
+offers = pd.read_csv("data/raw/offers.csv")
+
+# Clean leads
+leads_clean = leads.dropna(subset=['Id'])
+leads_clean = leads_clean.drop(['First Name', 'Use Case', 'Created Date', 'Status', 'Converted'], axis=1)
+
+# Merge datasets
+full_data = pd.merge(offers, leads_clean, on='Id', how='left')
+
+# Drop high-missing and irrelevant columns
+full_data = full_data.drop(['Id', 'Discarded/Nurturing Reason', 'Acquisition Campaign'], axis=1)
+
+# Convert dates
+full_data['Created Date'] = pd.to_datetime(full_data['Created Date'], format="%Y-%m-%d")
+full_data['Close Date'] = pd.to_datetime(full_data['Close Date'], format="%Y-%m-%d")
+
+# Extract date features
+full_data['Created Year'] = full_data['Created Date'].dt.year
+full_data['Created Month'] = full_data['Created Date'].dt.month
+full_data['Close Year'] = full_data['Close Date'].dt.year
+full_data['Close Month'] = full_data['Close Date'].dt.month
+full_data = full_data.drop(['Created Date', 'Close Date'], axis=1)
+
+# Map target classes
+clase_mapping = {'Closed Won': 'Closed Won', 'Closed Lost': 'Closed Lost'}
+full_data['Status'] = full_data['Status'].map(clase_mapping).fillna('Other')
+
+# Encode categorical variables
+le = LabelEncoder()
+for col in full_data.select_dtypes(['object']).columns:
+    full_data[col] = le.fit_transform(full_data[col])
+
+# Save processed data
+full_data.to_csv("data/processed/custom_dataset.csv", index=False)
+print(f"Processed dataset shape: {full_data.shape}")
+```

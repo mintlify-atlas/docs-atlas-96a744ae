@@ -1,0 +1,171 @@
+---
+title: Feature Engineering
+description: Learn how features are extracted, transformed, and encoded to prepare data for the Gradient Boosting model
+---
+
+## Overview
+
+Feature engineering transforms raw data into meaningful features that improve model performance. This process includes date extraction, categorical encoding, and feature scaling.
+
+## Date Feature Extraction
+
+### Converting to DateTime
+
+First, date columns are converted from strings to datetime objects:
+
+```python
+full_dataset_preprocessed['Created Date'] = pd.to_datetime(
+    full_dataset_preprocessed['Created Date'], 
+    format="%Y-%m-%d"
+)
+full_dataset_preprocessed['Close Date'] = pd.to_datetime(
+    full_dataset_preprocessed['Close Date'], 
+    format="%Y-%m-%d"
+)
+```
+
+### Extracting Year and Month
+
+Temporal features are extracted from the datetime columns:
+
+```python
+full_dataset_preprocessed['Created Year'] = full_dataset_preprocessed['Created Date'].dt.year
+full_dataset_preprocessed['Created Month'] = full_dataset_preprocessed['Created Date'].dt.month
+full_dataset_preprocessed['Close Year'] = full_dataset_preprocessed['Close Date'].dt.year
+full_dataset_preprocessed['Close Month'] = full_dataset_preprocessed['Close Date'].dt.month
+```
+
+This creates four new features:
+- `Created Year`: Year when the offer was created
+- `Created Month`: Month when the offer was created
+- `Close Year`: Year when the offer was closed
+- `Close Month`: Month when the offer was closed
+
+<Note>
+  Extracting year and month as separate features allows the model to capture seasonal patterns and temporal trends in lead conversion.
+</Note>
+
+### Dropping Original Date Columns
+
+After extraction, the original datetime columns are removed:
+
+```python
+full_dataset_preprocessed = full_dataset_preprocessed.drop(
+    ['Created Date', 'Close Date'], 
+    axis=1
+)
+```
+
+## Target Variable Mapping
+
+### Status Column Transformation
+
+The `Status` column contains the target variable. Minority classes are grouped to address class imbalance:
+
+```python
+clase_mapping = {'Closed Won': 'Closed Won', 'Closed Lost': 'Closed Lost'}
+# Assign 'Other' to all classes that are not 'Closed Won' or 'Closed Lost'
+full_dataset_preprocessed['Status'] = full_dataset_preprocessed['Status'].map(clase_mapping).fillna('Other')
+```
+
+This creates three target classes:
+- **Closed Won**: Successfully converted leads
+- **Closed Lost**: Lost opportunities
+- **Other**: All other statuses (e.g., In Progress, Nurturing)
+
+<Warning>
+  Grouping minority classes into "Other" helps prevent overfitting on rare categories and improves model generalization.
+</Warning>
+
+## Label Encoding
+
+### Why Label Encoding?
+
+Machine learning models require numerical inputs. Label Encoding converts categorical variables into integer representations.
+
+### Implementation
+
+<Steps>
+  <Step title="Create LabelEncoder instance">
+    ```python
+    from sklearn.preprocessing import LabelEncoder
+
+    # Creating a instance of label Encoder.
+    label_encoder = LabelEncoder()
+    ```
+  </Step>
+
+  <Step title="Identify categorical columns">
+    Select all columns with object or datetime data types:
+
+    ```python
+    # List of categorical columns to encode
+    categorical_columns = full_dataset_preprocessed.select_dtypes(
+        ['object', 'datetime64[ns]']
+    ).columns
+    categorical_columns = list(set(categorical_columns))
+    ```
+  </Step>
+
+  <Step title="Apply encoding">
+    Transform each categorical column into numerical values:
+
+    ```python
+    # Aplicar LabelEncoder a cada columna categórica
+    for column in categorical_columns:
+        if column in full_dataset_preprocessed.columns:
+            full_dataset_preprocessed[column] = label_encoder.fit_transform(
+                full_dataset_preprocessed[column]
+            )
+    ```
+  </Step>
+</Steps>
+
+### Encoded Features
+
+The following categorical features are encoded:
+- `Source` (Inbound, Outbound, etc.)
+- `City` (Various cities)
+- `Loss Reason` (Reasons for lost opportunities)
+- `Pain` (Customer pain level)
+- `Discount code` (Applied discount codes)
+- `Status` (Closed Won, Closed Lost, Other)
+- `Use Case` (Type of use case)
+
+<Note>
+  Each unique category is assigned a unique integer. For example, if `Source` has values ["Inbound", "Outbound", "Referral"], they might be encoded as [0, 1, 2].
+</Note>
+
+## Data Scaling
+
+After encoding, numerical features are scaled using StandardScaler to normalize their ranges:
+
+```python
+from sklearn.preprocessing import StandardScaler
+
+scaler = StandardScaler()
+# Scale numerical features
+```
+
+<Note>
+  StandardScaler transforms features to have zero mean and unit variance, which helps gradient boosting algorithms converge faster and perform better.
+</Note>
+
+## Final Output
+
+The fully preprocessed dataset is saved for model training:
+
+```python
+full_dataset_preprocessed.to_csv("data/processed/full_dataset.csv", index=False)
+```
+
+## Summary
+
+The feature engineering pipeline:
+1. Extracts temporal features (year, month) from dates
+2. Maps target variable to three balanced classes
+3. Encodes all categorical variables using LabelEncoder
+4. Scales numerical features using StandardScaler
+5. Outputs a clean, model-ready dataset
+
+This processed dataset is now ready for training the Gradient Boosting classifier.

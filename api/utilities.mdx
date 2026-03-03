@@ -1,0 +1,403 @@
+---
+title: 'Utilities API'
+description: 'API reference for utility functions including custom logging and Shimoku dashboard helpers'
+---
+
+## CustomLogger Class
+
+A custom logging utility that provides formatted console and file logging for the Lead Scoring Model project.
+
+### Class Initialization
+
+#### `__init__(name, log_file=None)`
+
+Creates a configured logger instance with custom formatting.
+
+<ParamField path="name" type="str" required>
+  Name of the logger (typically the module or class name)
+</ParamField>
+
+<ParamField path="log_file" type="str" default="None">
+  Optional log file name. If provided, logs will be written to `reports/{log_file}`. The file is opened in write mode ('w'), overwriting existing content.
+</ParamField>
+
+<ResponseField name="logger" type="logging.Logger">
+  Configured logger instance with:
+  - Log level: DEBUG
+  - Console handler with custom formatting
+  - File handler (if log_file provided) with custom formatting
+  - Format: `%(asctime)s - %(name)s - %(levelname)s: \n%(message)s \n`
+</ResponseField>
+
+```python
+from src.utils.logger import CustomLogger
+
+# Console logging only
+logger = CustomLogger(name='MyModule').get_logger()
+logger.info("This goes to console")
+
+# Console and file logging
+logger = CustomLogger(name='DataProcessor', log_file='processing.log').get_logger()
+logger.info("This goes to console and reports/processing.log")
+```
+
+---
+
+### Methods
+
+#### `get_logger()`
+
+Returns the configured logger instance.
+
+<ParamField path="self" type="CustomLogger">
+  Instance reference
+</ParamField>
+
+<ResponseField name="logger" type="logging.Logger">
+  The configured Python logging.Logger instance
+</ResponseField>
+
+```python
+from src.utils.logger import CustomLogger
+
+# Create and get logger
+custom_logger = CustomLogger(name='ModelTraining', log_file='model_training.log')
+logger = custom_logger.get_logger()
+
+# Use standard logging methods
+logger.debug("Debug information")
+logger.info("Informational message")
+logger.warning("Warning message")
+logger.error("Error message")
+logger.critical("Critical message")
+```
+
+---
+
+### StringFormatter Class
+
+Internal formatter class that ensures all log messages are converted to strings.
+
+#### `format(record)`
+
+Converts log record messages to strings before formatting.
+
+<ParamField path="record" type="logging.LogRecord" required>
+  Log record to format
+</ParamField>
+
+<ResponseField name="formatted_record" type="str">
+  Formatted log message string
+</ResponseField>
+
+---
+
+## Example: Complete Logger Usage
+
+```python
+from src.utils.logger import CustomLogger
+import pandas as pd
+
+# Initialize logger for a data processing module
+logger = CustomLogger(
+    name='DataProcessing', 
+    log_file='data_processing.log'
+).get_logger()
+
+# Log different levels
+logger.info("Starting data processing pipeline")
+
+try:
+    data = pd.read_csv("data/raw/leads.csv")
+    logger.debug(f"Loaded {len(data)} records")
+    
+    # Process data
+    data_cleaned = data.dropna()
+    logger.info(f"Cleaned data: {len(data_cleaned)} records remaining")
+    
+except FileNotFoundError as e:
+    logger.error(f"File not found: {e}")
+except Exception as e:
+    logger.critical(f"Unexpected error: {e}")
+
+logger.info("Data processing completed")
+```
+
+**Console Output:**
+```
+2026-03-03 10:30:15,123 - DataProcessing - INFO: 
+Starting data processing pipeline 
+
+2026-03-03 10:30:15,456 - DataProcessing - DEBUG: 
+Loaded 1000 records 
+
+2026-03-03 10:30:15,789 - DataProcessing - INFO: 
+Cleaned data: 985 records remaining 
+
+2026-03-03 10:30:16,012 - DataProcessing - INFO: 
+Data processing completed 
+```
+
+---
+
+## Dashboard Functions
+
+Utility functions for creating Shimoku dashboard components to visualize lead scoring predictions.
+
+### `page_header(shimoku_client, order)`
+
+Creates a styled header banner for the predictions page.
+
+<ParamField path="shimoku_client" type="shimoku.Client" required>
+  Shimoku API client instance
+</ParamField>
+
+<ParamField path="order" type="int" required>
+  Component order position on the dashboard
+</ParamField>
+
+```python
+import shimoku_api_python as shimoku
+from src.utils.aux import page_header
+
+# Initialize Shimoku client
+client = shimoku.Client(
+    access_token="your_token",
+    universe_id="your_universe",
+    workspace_id="your_workspace"
+)
+
+# Create header at position 0
+page_header(shimoku_client=client, order=0)
+```
+
+**Rendered Output:**
+- Styled header with customer icon
+- Title: "Predictions"
+- Subtitle: "Lead scoring prediction"
+- Teal background color
+
+---
+
+### `prediction_table(shimoku_client, order, binary_prediction_table)`
+
+Creates a formatted table displaying lead predictions with color-coded status labels.
+
+<ParamField path="shimoku_client" type="shimoku.Client" required>
+  Shimoku API client instance
+</ParamField>
+
+<ParamField path="order" type="int" required>
+  Starting order position (uses order, order+1, order+2)
+</ParamField>
+
+<ParamField path="binary_prediction_table" type="pd.DataFrame" required>
+  DataFrame containing prediction results with columns:
+  - Observation: Observation number
+  - Use Case: Lead use case
+  - Discount code: Discount applied
+  - Loss Reason: Reason for loss
+  - Source: Lead source
+  - City: City location
+  - Predicted Class: "Closed Won", "Closed Lost", or "Other"
+</ParamField>
+
+```python
+import shimoku_api_python as shimoku
+import pandas as pd
+from src.utils.aux import prediction_table
+
+# Prepare prediction data
+predictions_df = pd.DataFrame({
+    'Observation': [1, 2, 3],
+    'Use Case': ['Product A', 'Product B', 'Product C'],
+    'Discount code': [10, 0, 15],
+    'Loss Reason': ['Price', 'No response', 'Competition'],
+    'Source': ['Web', 'Email', 'Referral'],
+    'City': ['New York', 'Los Angeles', 'Chicago'],
+    'Predicted Class': ['Closed Won', 'Closed Lost', 'Other']
+})
+
+# Initialize client
+client = shimoku.Client(
+    access_token="your_token",
+    universe_id="your_universe",
+    workspace_id="your_workspace"
+)
+
+# Create prediction table at position 1
+prediction_table(
+    shimoku_client=client, 
+    order=1, 
+    binary_prediction_table=predictions_df
+)
+```
+
+**Component Structure:**
+- Header HTML (order): "Lead prediction & factors" title
+- Table (order+1): Formatted table with color-coded labels
+  - Closed Won: Green (#20C69E)
+  - Closed Lost: Red (#F86C7D)
+  - Other: Yellow (#F2BB67)
+- Explanation banner (order+2): Info box with description
+
+---
+
+### `distribution_chart(shimoku_client, order, doughnut_chart_data)`
+
+Creates a doughnut chart visualization for probability distribution.
+
+<ParamField path="shimoku_client" type="shimoku.Client" required>
+  Shimoku API client instance
+</ParamField>
+
+<ParamField path="order" type="int" required>
+  Component order position
+</ParamField>
+
+<ParamField path="doughnut_chart_data" type="dict" required>
+  ECharts configuration dictionary with chart options for doughnut/pie chart
+</ParamField>
+
+```python
+import shimoku_api_python as shimoku
+from src.utils.aux import distribution_chart
+
+# Prepare chart data (ECharts format)
+chart_data = {
+    'title': {'text': 'Lead Probability Distribution'},
+    'tooltip': {'trigger': 'item'},
+    'series': [{
+        'name': 'Probability Range',
+        'type': 'pie',
+        'radius': ['40%', '70%'],
+        'data': [
+            {'value': 120, 'name': '0-25%'},
+            {'value': 85, 'name': '25-50%'},
+            {'value': 65, 'name': '50-75%'},
+            {'value': 30, 'name': '75-100%'}
+        ]
+    }]
+}
+
+# Initialize client
+client = shimoku.Client(
+    access_token="your_token",
+    universe_id="your_universe",
+    workspace_id="your_workspace"
+)
+
+# Create distribution chart
+distribution_chart(
+    shimoku_client=client, 
+    order=3, 
+    doughnut_chart_data=chart_data
+)
+```
+
+**Chart Properties:**
+- Size: 5 columns × 2 rows
+- Type: Free ECharts (custom configuration)
+
+---
+
+### `get_label_columns(table_data)`
+
+Internal helper function that returns color mapping for the Predicted Class column.
+
+<ParamField path="table_data" type="pd.DataFrame" required>
+  DataFrame to display (printed for debugging)
+</ParamField>
+
+<ResponseField name="label_config" type="dict">
+  Dictionary mapping column names to label color configurations:
+  - Closed Won: #20C69E (Green)
+  - Closed Lost: #F86C7D (Red)
+  - Other: #F2BB67 (Yellow)
+</ResponseField>
+
+```python
+from src.utils.aux import get_label_columns
+import pandas as pd
+
+df = pd.DataFrame({
+    'Predicted Class': ['Closed Won', 'Closed Lost', 'Other']
+})
+
+label_config = get_label_columns(df)
+print(label_config)
+# Output:
+# {
+#     'Predicted Class': {
+#         'Closed Won': '#20C69E',
+#         'Closed Lost': '#F86C7D',
+#         'Other': '#F2BB67'
+#     }
+# }
+```
+
+---
+
+## Example: Complete Dashboard Creation
+
+```python
+import shimoku_api_python as shimoku
+import pandas as pd
+from src.utils.aux import page_header, prediction_table, distribution_chart
+from src.models.train_model import ModelTraining
+
+# Initialize Shimoku client
+client = shimoku.Client(
+    access_token="your_access_token",
+    universe_id="your_universe_id",
+    workspace_id="your_workspace_id"
+)
+
+# Train model and get predictions
+trainer = ModelTraining()
+results = trainer.run()
+
+# 1. Create page header
+page_header(shimoku_client=client, order=0)
+
+# 2. Create prediction table
+prediction_table(
+    shimoku_client=client,
+    order=1,
+    binary_prediction_table=results['predictions_df']
+)
+
+# 3. Create distribution chart
+prob_dist = results['probability_distribution']
+chart_config = {
+    'title': {'text': 'Lead Conversion Probability Distribution'},
+    'tooltip': {'trigger': 'item'},
+    'legend': {'orient': 'vertical', 'left': 'left'},
+    'series': [{
+        'name': 'Probability Range',
+        'type': 'pie',
+        'radius': ['40%', '70%'],
+        'data': [
+            {'value': prob_dist['25%'], 'name': '0-25%'},
+            {'value': prob_dist['50%'], 'name': '25-50%'},
+            {'value': prob_dist['75%'], 'name': '50-75%'},
+            {'value': prob_dist['100%'], 'name': '75-100%'}
+        ],
+        'emphasis': {
+            'itemStyle': {
+                'shadowBlur': 10,
+                'shadowOffsetX': 0,
+                'shadowColor': 'rgba(0, 0, 0, 0.5)'
+            }
+        }
+    }]
+}
+
+distribution_chart(
+    shimoku_client=client,
+    order=4,
+    doughnut_chart_data=chart_config
+)
+
+print("Dashboard created successfully!")
+```

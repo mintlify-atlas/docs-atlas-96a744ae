@@ -1,0 +1,102 @@
+---
+title: Introduction
+description: AI-powered lead scoring model to predict conversion probability for Event Management SaaS clients
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.svg"
+  alt="Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.svg"
+  alt="Hero Dark"
+/>
+
+## Welcome to Lead Scoring Model
+
+The Lead Scoring Model is a machine learning solution that predicts the probability of lead conversion for Event Management SaaS applications. Built with Gradient Boosting, this model achieves 90.4% accuracy in classifying leads into conversion outcomes.
+
+## Key Capabilities
+
+<CardGroup cols={2}>
+  <Card
+    title="High Accuracy Predictions"
+    icon="chart-line"
+    href="/quickstart"
+  >
+    Gradient Boosting model achieving 90.4% accuracy with 0.91 cross-validation score
+  </Card>
+  <Card
+    title="Multi-Model Comparison"
+    icon="layer-group"
+    href="/quickstart#model-training"
+  >
+    Compares 12 classification algorithms including Random Forest, AdaBoost, SVM, and Neural Networks
+  </Card>
+  <Card
+    title="Advanced Data Preprocessing"
+    icon="filter"
+    href="/quickstart#data-preprocessing"
+  >
+    Automated data fusion, missing value imputation, label encoding, and feature scaling
+  </Card>
+  <Card
+    title="Production Ready"
+    icon="rocket"
+    href="/installation"
+  >
+    Integrated with Shimoku API for dashboard visualization and real-time predictions
+  </Card>
+</CardGroup>
+
+## How It Works
+
+The model processes two primary datasets:
+
+1. **Leads Data** - Information about all potential clients including source, use case, acquisition campaign, and demographic details
+2. **Offers Data** - Details about clients who reached the demo meeting stage, including pricing, discount codes, pain points, and conversion status
+
+Through intelligent data fusion and feature engineering, the model identifies patterns that predict whether a lead will convert to a paying customer.
+
+## Model Architecture
+
+The system evaluates 12 different classification algorithms:
+
+- **Ensemble Methods**: Random Forest, AdaBoost, Extra Trees, Bagging Classifier, Gradient Boosting
+- **Tree-based**: Decision Tree
+- **Probabilistic**: Naive Bayes
+- **Instance-based**: K-Nearest Neighbors
+- **Linear Models**: Logistic Regression, SGD Classifier
+- **Neural Networks**: Multi-Layer Perceptron
+- **Support Vector Machines**: SVM
+
+The **Gradient Boosting Classifier** emerged as the best performer with a cross-validation score of 0.91.
+
+## Target Classification
+
+The model classifies leads into three categories:
+
+- **Closed Won** - Leads that converted to paying customers
+- **Closed Lost** - Leads that did not convert
+- **Other** - Leads in intermediate states (grouped from minority classes to handle class imbalance)
+
+## Get Started
+
+<CardGroup cols={2}>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Set up the project and install dependencies
+  </Card>
+  <Card
+    title="Quickstart"
+    icon="bolt"
+    href="/quickstart"
+  >
+    Train your first model and make predictions
+  </Card>
+</CardGroup>

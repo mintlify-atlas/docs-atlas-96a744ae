@@ -1,0 +1,256 @@
+---
+title: 'Model Training API'
+description: 'Complete API reference for the ModelTraining class that trains and evaluates multiple classifiers for lead scoring'
+---
+
+## ModelTraining Class
+
+The `ModelTraining` class handles the complete machine learning pipeline for lead scoring, including data loading, model comparison, training, and prediction generation.
+
+### Class Initialization
+
+#### `__init__()`
+
+Initializes the ModelTraining class with a custom logger and defines 12 classification models to compare.
+
+<ParamField path="self" type="ModelTraining">
+  Instance reference
+</ParamField>
+
+<ResponseField name="logger" type="logging.Logger">
+  CustomLogger instance configured with name 'ModelTraining' and log file 'model_training.log'
+</ResponseField>
+
+<ResponseField name="models" type="list[tuple]">
+  List of tuples containing model names and their sklearn estimator instances:
+  - RandomForest (RandomForestClassifier)
+  - Adaboost (AdaBoostClassifier)
+  - ExtraTree (ExtraTreesClassifier)
+  - BaggingClassifier (with DecisionTreeClassifier base estimator)
+  - GradientBoosting (GradientBoostingClassifier)
+  - DecisionTree (DecisionTreeClassifier)
+  - NaiveBayes (GaussianNB)
+  - KNN (KNeighborsClassifier)
+  - Logistic (LogisticRegression)
+  - SGD Classifier (SGDClassifier)
+  - MLPClassifier (Multi-layer Perceptron)
+  - SVM (Support Vector Machine)
+</ResponseField>
+
+```python
+from src.models.train_model import ModelTraining
+
+# Initialize the trainer
+trainer = ModelTraining()
+```
+
+---
+
+### Methods
+
+#### `get_training_data()`
+
+Reads the processed dataset and splits it into training and testing sets with an 80/20 split.
+
+<ParamField path="self" type="ModelTraining">
+  Instance reference
+</ParamField>
+
+<ResponseField name="X_train" type="pd.DataFrame">
+  Training features (80% of data)
+</ResponseField>
+
+<ResponseField name="X_test" type="pd.DataFrame">
+  Testing features (20% of data)
+</ResponseField>
+
+<ResponseField name="y_train" type="pd.Series">
+  Training labels - Status column (Closed Won, Closed Lost, Other)
+</ResponseField>
+
+<ResponseField name="y_test" type="pd.Series">
+  Testing labels - Status column (Closed Won, Closed Lost, Other)
+</ResponseField>
+
+```python
+trainer = ModelTraining()
+X_train, X_test, y_train, y_test = trainer.get_training_data()
+
+print(f"Training samples: {len(X_train)}")
+print(f"Testing samples: {len(X_test)}")
+```
+
+---
+
+#### `compare_classifiers(X_train, y_train)`
+
+Compares all 12 classification models using 5-fold cross-validation and returns their mean scores.
+
+<ParamField path="X_train" type="pd.DataFrame" required>
+  Training feature data
+</ParamField>
+
+<ParamField path="y_train" type="pd.Series" required>
+  Training target labels
+</ParamField>
+
+<ResponseField name="scores" type="dict">
+  Dictionary mapping model names to their mean cross-validation scores. Each model is evaluated using a pipeline with StandardScaler applied to 'Price' and 'Discount code' columns.
+</ResponseField>
+
+```python
+trainer = ModelTraining()
+X_train, X_test, y_train, y_test = trainer.get_training_data()
+
+# Compare all classifiers
+model_scores = trainer.compare_classifiers(X_train, y_train)
+
+# Display results
+for model_name, score in model_scores.items():
+    print(f"{model_name}: {score:.4f}")
+
+# Find best model
+best_model = max(model_scores, key=model_scores.get)
+print(f"\nBest Model: {best_model} with score {model_scores[best_model]:.4f}")
+```
+
+---
+
+#### `get_lead_distribution(X_test, y_predicted, y_probabilities)`
+
+Generates lead distribution analysis by mapping predictions to original data and categorizing leads by conversion probability.
+
+<ParamField path="X_test" type="pd.DataFrame" required>
+  Test feature data with original index preserved
+</ParamField>
+
+<ParamField path="y_predicted" type="np.ndarray" required>
+  Predicted class labels as integers (0: Closed Lost, 1: Closed Won, 2: Other)
+</ParamField>
+
+<ParamField path="y_probabilities" type="np.ndarray" required>
+  Prediction probabilities array with shape (n_samples, n_classes)
+</ParamField>
+
+<ResponseField name="impact_df" type="pd.DataFrame">
+  DataFrame containing:
+  - Observation: Sequential observation number
+  - Use Case: Original use case from data
+  - Discount code: Discount code value
+  - Loss Reason: Reason for loss (if applicable)
+  - Source: Lead source
+  - City: City location
+  - Predicted Class: Mapped prediction ("Closed Won", "Closed Lost", "Other")
+</ResponseField>
+
+<ResponseField name="probability_distribution" type="pd.Series">
+  Count of observations in each probability range:
+  - 25%: Probability 0-0.25
+  - 50%: Probability 0.25-0.5
+  - 75%: Probability 0.5-0.75
+  - 100%: Probability 0.75-1.0
+</ResponseField>
+
+```python
+import numpy as np
+
+trainer = ModelTraining()
+X_train, X_test, y_train, y_test = trainer.get_training_data()
+
+# Train a model (example with GradientBoosting)
+from sklearn.ensemble import GradientBoostingClassifier
+model = GradientBoostingClassifier(random_state=42)
+model.fit(X_train, y_train)
+
+# Get probabilities and predictions
+y_probabilities = model.predict_proba(X_test)
+y_predicted = np.argmax(y_probabilities, axis=1)
+
+# Get distribution analysis
+impact_df, prob_dist = trainer.get_lead_distribution(X_test, y_predicted, y_probabilities)
+
+print("Probability Distribution:")
+print(prob_dist)
+print("\nSample predictions:")
+print(impact_df.head())
+```
+
+---
+
+#### `run()`
+
+Executes the complete training pipeline: loads data, compares classifiers, trains the best model, and generates predictions.
+
+<ParamField path="self" type="ModelTraining">
+  Instance reference
+</ParamField>
+
+<ResponseField name="data" type="dict">
+  Dictionary containing training results:
+  - predictions_df (pd.DataFrame): Lead predictions with factors
+  - probability_distribution (pd.Series): Distribution of prediction probabilities
+  - accuracy_score (float): Model accuracy on test set
+</ResponseField>
+
+```python
+from src.models.train_model import ModelTraining
+
+# Initialize and run complete training pipeline
+trainer = ModelTraining()
+results = trainer.run()
+
+# Access results
+print(f"Model Accuracy: {results['accuracy_score']:.4f}")
+print("\nProbability Distribution:")
+print(results['probability_distribution'])
+print("\nSample Predictions:")
+print(results['predictions_df'].head(10))
+
+# Save predictions to file
+results['predictions_df'].to_csv('lead_predictions.csv', index=False)
+```
+
+---
+
+## Example: Complete Workflow
+
+```python
+from src.models.train_model import ModelTraining
+import pandas as pd
+
+# Initialize the trainer
+trainer = ModelTraining()
+
+# Option 1: Run the complete pipeline
+results = trainer.run()
+print(f"Accuracy: {results['accuracy_score']:.4f}")
+
+# Option 2: Step-by-step execution for more control
+X_train, X_test, y_train, y_test = trainer.get_training_data()
+
+# Compare models
+scores = trainer.compare_classifiers(X_train, y_train)
+for model, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+    print(f"{model}: {score:.4f}")
+
+# Train best model manually
+best_model_name = max(scores, key=scores.get)
+print(f"\nTraining {best_model_name}...")
+
+# Access the best model from the models list
+best_model_index = [name for name, _ in trainer.models].index(best_model_name)
+best_model = trainer.models[best_model_index][1]
+
+# Fit and predict
+best_model.fit(X_train, y_train)
+y_probabilities = best_model.predict_proba(X_test)
+y_predicted = best_model.predict(X_test)
+
+# Get detailed analysis
+import numpy as np
+y_pred_argmax = np.argmax(y_probabilities, axis=1)
+predictions_df, prob_dist = trainer.get_lead_distribution(X_test, y_pred_argmax, y_probabilities)
+
+print("\nPrediction Analysis:")
+print(predictions_df.head())
+```

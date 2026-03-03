@@ -1,0 +1,330 @@
+---
+title: Data Schema
+description: Complete reference for the leads and offers datasets including field definitions and data types
+---
+
+## Dataset Overview
+
+The lead scoring model uses two primary datasets that represent different stages of the sales process:
+
+<CardGroup cols={2}>
+  <Card title="leads.csv" icon="users">
+    Contains data for **all potential clients** who entered the sales pipeline, regardless of whether they progressed to the offer stage.
+  </Card>
+  <Card title="offers.csv" icon="file-contract">
+    Contains data for clients who **reached the demo meeting stage** and received formal offers.
+  </Card>
+</CardGroup>
+
+<Info>
+The datasets are merged using the **Id** field as the unique identifier, creating a complete view of each lead's journey through the sales process.
+</Info>
+
+## leads.csv Schema
+
+This dataset captures the initial contact and qualification phase of potential clients.
+
+### Field Definitions
+
+<AccordionGroup>
+  <Accordion title="Id" icon="fingerprint">
+    **Type:** String/Integer  
+    **Description:** Unique identifier for the lead. This field is used to merge with the offers dataset.
+    
+    <Note>
+    Rows with null values in the Id column are removed during preprocessing as they cannot be matched to offers.
+    </Note>
+  </Accordion>
+  
+  <Accordion title="First Name" icon="user">
+    **Type:** String  
+    **Description:** Lead's first name.
+    
+    **Preprocessing:** This field is **dropped** during preprocessing as it is personally identifiable information (PII) and not predictive of conversion.
+  </Accordion>
+  
+  <Accordion title="Use Case" icon="lightbulb">
+    **Type:** Categorical  
+    **Description:** Type of use case for the potential client (e.g., specific event types or business needs).
+    
+    **Preprocessing:** Dropped from leads dataset as it duplicates the Use Case field in offers.csv.
+  </Accordion>
+  
+  <Accordion title="Source" icon="diagram-project">
+    **Type:** Categorical  
+    **Description:** Lead acquisition source.
+    
+    **Possible Values:**
+    - Inbound (e.g., website inquiries, content downloads)
+    - Outbound (e.g., sales outreach, cold calls)
+    
+    **Preprocessing:** Label encoded for model input.
+  </Accordion>
+  
+  <Accordion title="Status" icon="signal">
+    **Type:** Categorical  
+    **Description:** Current status of the lead in the qualification pipeline.
+    
+    **Preprocessing:** Dropped from leads dataset as it refers to the intermediate status, while the final Status from offers.csv is used as the target variable.
+  </Accordion>
+  
+  <Accordion title="Discarded/Nurturing Reason" icon="comment">
+    **Type:** Categorical  
+    **Description:** Reason for lead discard or placement in nurturing workflow.
+    
+    **Preprocessing:** **Dropped** - Over 80% null values make this field unsuitable for modeling.
+  </Accordion>
+  
+  <Accordion title="Acquisition Campaign" icon="bullhorn">
+    **Type:** Categorical  
+    **Description:** Marketing campaign that generated the lead.
+    
+    **Preprocessing:** **Dropped** - Over 80% null values make this field unsuitable for modeling.
+  </Accordion>
+  
+  <Accordion title="Created Date" icon="calendar">
+    **Type:** Date (YYYY-MM-DD)  
+    **Description:** Lead creation date.
+    
+    **Preprocessing:** Dropped from leads dataset as it duplicates the Created Date field in offers.csv.
+  </Accordion>
+  
+  <Accordion title="Converted" icon="check-circle">
+    **Type:** Binary (0/1)  
+    **Description:** Target variable indicating whether the lead converted.
+    - 1 = Converted
+    - 0 = Not converted
+    
+    **Preprocessing:** Dropped from leads dataset as the Status field from offers.csv provides more granular information.
+  </Accordion>
+  
+  <Accordion title="City" icon="location-dot">
+    **Type:** Categorical  
+    **Description:** Geographic city location of the lead.
+    
+    **Preprocessing:** Label encoded. Missing values are imputed with the mode.
+  </Accordion>
+</AccordionGroup>
+
+## offers.csv Schema
+
+This dataset contains detailed information about leads who progressed to the offer stage.
+
+### Field Definitions
+
+<AccordionGroup>
+  <Accordion title="Id" icon="fingerprint">
+    **Type:** String/Integer  
+    **Description:** Unique identifier for the offer, matching the Id field in leads.csv.
+    
+    **Preprocessing:** Used for merging datasets, then dropped as it's not a predictive feature.
+  </Accordion>
+  
+  <Accordion title="Use Case" icon="lightbulb">
+    **Type:** Categorical  
+    **Description:** Type of use case for the offer (e.g., corporate events, weddings, conferences).
+    
+    **Preprocessing:** Label encoded for model input.
+  </Accordion>
+  
+  <Accordion title="Status" icon="flag-checkered" defaultOpen>
+    **Type:** Categorical  
+    **Description:** **TARGET VARIABLE** - Final status of the offer representing the conversion outcome.
+    
+    **Original Values:** Multiple status categories exist in the raw data.
+    
+    **Preprocessed Values:**
+    ```python
+    # Class mapping to address imbalance
+    clase_mapping = {
+        'Closed Won': 'Closed Won',
+        'Closed Lost': 'Closed Lost'
+    }
+    # All other statuses → 'Other'
+    ```
+    
+    - **Closed Won** - Lead successfully converted to paying customer
+    - **Closed Lost** - Lead did not convert, opportunity lost
+    - **Other** - Minority status categories grouped together
+    
+    <Warning>
+    This is the primary target variable for the classification model. The three-class structure addresses class imbalance in the original data.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="Created Date" icon="calendar">
+    **Type:** Date (YYYY-MM-DD)  
+    **Description:** Offer creation date.
+    
+    **Preprocessing:** Decomposed into temporal features:
+    ```python
+    full_dataset_preprocessed['Created Year'] = created_date.dt.year
+    full_dataset_preprocessed['Created Month'] = created_date.dt.month
+    ```
+    Original date field is dropped after feature extraction.
+  </Accordion>
+  
+  <Accordion title="Close Date" icon="calendar-check">
+    **Type:** Date (YYYY-MM-DD)  
+    **Description:** Date when the offer was closed (won or lost).
+    
+    **Preprocessing:** Decomposed into temporal features:
+    ```python
+    full_dataset_preprocessed['Close Year'] = close_date.dt.year
+    full_dataset_preprocessed['Close Month'] = close_date.dt.month
+    ```
+    Original date field is dropped after feature extraction.
+  </Accordion>
+  
+  <Accordion title="Price" icon="dollar-sign">
+    **Type:** Numerical (Float)  
+    **Description:** Offer price in the local currency.
+    
+    **Preprocessing:** 
+    - Missing values imputed with the mean
+    - Scaled using StandardScaler in the model pipeline
+    
+    ```python
+    ct = ColumnTransformer([
+        ('se', StandardScaler(), ['Price', 'Discount code'])
+    ], remainder='passthrough')
+    ```
+  </Accordion>
+  
+  <Accordion title="Discount code" icon="percent">
+    **Type:** Numerical (Float)  
+    **Description:** Applied discount code value or percentage.
+    
+    **Preprocessing:**
+    - Missing values imputed with the mean
+    - Scaled using StandardScaler in the model pipeline
+    - Also label encoded as categorical in some preprocessing steps
+  </Accordion>
+  
+  <Accordion title="Pain" icon="heart-pulse">
+    **Type:** Categorical  
+    **Description:** Customer's pain level or urgency of need.
+    
+    **Possible Values:** Various levels indicating the severity or urgency of the customer's problem.
+    
+    **Preprocessing:** Label encoded. Missing values imputed with mode.
+  </Accordion>
+  
+  <Accordion title="Loss Reason" icon="xmark">
+    **Type:** Categorical  
+    **Description:** Reason for offer loss (for Closed Lost cases).
+    
+    **Preprocessing:** Special handling:
+    ```python
+    # If Status is 'Closed Lost' and Loss Reason is null
+    full_dataset_preprocessed['Loss Reason'] = np.where(
+        (full_dataset_preprocessed['Status'] == 'Closed Lost') & 
+        (full_dataset_preprocessed['Loss Reason'].isnull()),
+        'no response',
+        full_dataset_preprocessed['Loss Reason']
+    )
+    
+    # If Status is 'Closed Won', impute with mode of Closed Won cases
+    mode_closed_won = full_dataset_preprocessed.loc[
+        full_dataset_preprocessed['Status'] == 'Closed Won', 
+        'Loss Reason'
+    ].mode()[0]
+    full_dataset_preprocessed['Loss Reason'].fillna(mode_closed_won, inplace=True)
+    ```
+    Then label encoded.
+  </Accordion>
+</AccordionGroup>
+
+## Merged Dataset Structure
+
+After merging and preprocessing, the final dataset structure is:
+
+<Tabs>
+  <Tab title="Features">
+    **Categorical Features (Label Encoded):**
+    - Use Case
+    - Source
+    - City
+    - Pain
+    - Loss Reason
+    
+    **Numerical Features:**
+    - Price (scaled)
+    - Discount code (scaled)
+    - Created Year
+    - Created Month
+    - Close Year
+    - Close Month
+  </Tab>
+  
+  <Tab title="Target">
+    **Target Variable:**
+    - Status (encoded as 0, 1, 2)
+      - 0 = Closed Lost
+      - 1 = Closed Won
+      - 2 = Other
+  </Tab>
+  
+  <Tab title="Dropped Fields">
+    **Removed During Preprocessing:**
+    - Id (not predictive)
+    - First Name (PII, not predictive)
+    - Discarded/Nurturing Reason (>80% null)
+    - Acquisition Campaign (>80% null)
+    - Duplicate fields from leads.csv:
+      - Use Case
+      - Created Date
+      - Status
+      - Converted
+    - Original date fields (after temporal feature extraction):
+      - Created Date
+      - Close Date
+  </Tab>
+</Tabs>
+
+## Data Quality Considerations
+
+<CardGroup cols={2}>
+  <Card title="Missing Values" icon="question">
+    Missing values are handled through:
+    - **Mode imputation** for categorical features
+    - **Mean imputation** for numerical features
+    - **Conditional imputation** for Loss Reason based on Status
+  </Card>
+  
+  <Card title="Class Imbalance" icon="scale-unbalanced">
+    The target variable Status originally had multiple classes. Minority classes are grouped into "Other" to address imbalance while preserving the main Closed Won/Closed Lost distinction.
+  </Card>
+  
+  <Card title="Data Fusion" icon="code-merge">
+    Left join from offers to leads ensures all offers are retained, with missing lead data handled through imputation.
+  </Card>
+  
+  <Card title="Temporal Features" icon="clock">
+    Date fields are decomposed into year and month components to capture seasonality and trends while maintaining numerical format.
+  </Card>
+</CardGroup>
+
+## Example Data Flow
+
+```python
+# 1. Load raw datasets
+leads_data = pd.read_csv("data/raw/leads.csv")
+offers_data = pd.read_csv("data/raw/offers.csv")
+
+# 2. Clean leads dataset
+leads_data_cleaned = leads_data.dropna(subset=['Id'])
+leads_data_cleaned = leads_data_cleaned.drop([
+    'First Name', 'Use Case', 'Created Date', 'Status', 'Converted'
+], axis=1)
+
+# 3. Merge datasets
+full_dataset = pd.merge(offers_data, leads_data_cleaned, on='Id', how='left')
+
+# 4. Result: Unified dataset with all fields
+# See preprocessing documentation for transformation details
+```
+
+<Card title="Next: Preprocessing" icon="gears" href="/concepts/preprocessing">
+  Learn how the data is transformed and prepared for machine learning
+</Card>

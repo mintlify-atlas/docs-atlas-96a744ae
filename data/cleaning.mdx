@@ -1,0 +1,219 @@
+---
+title: Data Cleaning
+description: Learn how missing values are handled and data quality issues are resolved in the preprocessing pipeline
+---
+
+## Overview
+
+Data cleaning fixes systematic problems and errors in raw data. This process ensures the dataset is reliable and ready for feature engineering and model training.
+
+## Missing Value Handling
+
+### Loss Reason Column
+
+The `Loss Reason` column requires special handling based on the `Status` value:
+
+<Steps>
+  <Step title="Handle 'Closed Lost' status">
+    For offers with `Status` = "Closed Lost" and null `Loss Reason`, fill with "no response":
+
+    ```python
+    # Fill null values in 'Loss Reason'
+    # If 'Status' is 'Closed Lost', fill in 'no response'
+    full_dataset_preprocessed['Loss Reason'] = np.where(
+        (full_dataset_preprocessed['Status'] == 'Closed Lost') & 
+        (full_dataset_preprocessed['Loss Reason'].isnull()), 
+        'no response', 
+        full_dataset_preprocessed['Loss Reason']
+    )
+    ```
+
+    <Note>
+      This assumes that lost deals without a recorded reason were likely due to no response from the prospect.
+    </Note>
+  </Step>
+
+  <Step title="Handle 'Closed Won' status">
+    For offers with `Status` = "Closed Won", fill missing `Loss Reason` with the mode:
+
+    ```python
+    # If 'Status' is 'Closed Won', fill with 'Loss Reason' mode for 'Closed Won'
+    mode_closed_won = full_dataset_preprocessed.loc[
+        full_dataset_preprocessed['Status'] == 'Closed Won', 
+        'Loss Reason'
+    ].mode()[0]
+    full_dataset_preprocessed['Loss Reason'].fillna(mode_closed_won, inplace=True)
+    ```
+
+    <Note>
+      Using the mode (most frequent value) for won deals preserves the distribution of this feature.
+    </Note>
+  </Step>
+</Steps>
+
+### General Imputation Strategy
+
+After handling `Loss Reason`, all remaining missing values are imputed based on data type:
+
+```python
+for col in full_dataset_preprocessed.columns:
+    if full_dataset_preprocessed[col].dtype in ['object', 'datetime64[ns]']:
+        # Categorical and datetime columns: fill with mode
+        full_dataset_preprocessed[col] = full_dataset_preprocessed[col].fillna(
+            full_dataset_preprocessed[col].mode()[0]
+        )
+    elif full_dataset_preprocessed[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+        # Numerical columns: fill with mean
+        full_dataset_preprocessed[col] = full_dataset_preprocessed[col].fillna(
+            full_dataset_preprocessed[col].mean()
+        )
+```
+
+**Strategy:**
+- **Categorical/Datetime columns**: Fill with **mode** (most frequent value)
+- **Numerical columns**: Fill with **mean** (average value)
+
+<Warning>
+  This imputation strategy assumes that missing values are random. If missingness is systematic (e.g., missing prices indicate special cases), this approach may introduce bias.
+</Warning>
+
+## Data Cleaning Class
+
+The project includes a comprehensive `DataCleaning` class in `src/data/data_cleaning.py` with additional cleaning methods:
+
+### Available Methods
+
+#### Inspection Methods
+
+```python
+data_cleaning = DataCleaning(main_path="data/raw")
+
+# Load dataset
+df = data_cleaning.load_dataset(dataset_path="leads.csv")
+
+# Inspect dataset structure and missing values
+data_cleaning.inspect_dataset(df)
+```
+
+The `inspect_dataset` method provides:
+- Dataset shape and overview
+- Data types distribution
+- Null value counts and proportions
+- Visual representation of missing data
+
+#### Handling Single-Value Columns
+
+Columns with only one unique value don't provide information for modeling:
+
+```python
+# Identify columns with single values
+counts = data_cleaning.identify_columns_with_single_value(df)
+
+# Remove zero-variance predictors
+df_cleaned = data_cleaning.delete_columns_with_single_value(df, counts)
+```
+
+<Note>
+  Zero-variance predictors (columns with a single value) are useless for modeling and should be removed.
+</Note>
+
+#### Handling Duplicate Rows
+
+Duplicate data can mislead model evaluation:
+
+```python
+# Identify duplicate rows
+data_cleaning.identify_row_with_duplicate_data(df)
+
+# Remove duplicates
+df_cleaned = data_cleaning.delete_row_with_duplicate_data(df)
+```
+
+#### Dropping Specific Columns
+
+Remove irrelevant or problematic columns:
+
+```python
+df_cleaned = data_cleaning.drop_columns(
+    df, 
+    columns_to_drop=['Id', 'First Name', 'Acquisition Campaign']
+)
+```
+
+#### Flexible Missing Value Handling
+
+The class provides multiple imputation strategies:
+
+```python
+# Drop rows with missing values
+df_cleaned = data_cleaning.handle_missing_values(
+    df, 
+    columns=['Id'], 
+    method='drop'
+)
+
+# Fill with mean (numerical columns)
+df_cleaned = data_cleaning.handle_missing_values(
+    df, 
+    columns=['Price'], 
+    method='mean'
+)
+
+# Fill with median (numerical columns)
+df_cleaned = data_cleaning.handle_missing_values(
+    df, 
+    columns=['Price'], 
+    method='median'
+)
+
+# Fill with mode (categorical columns)
+df_cleaned = data_cleaning.handle_missing_values(
+    df, 
+    columns=['City'], 
+    method='mode'
+)
+```
+
+#### Group-Based Imputation
+
+Impute missing values based on group statistics:
+
+```python
+# Impute using mode of each group
+df_cleaned = data_cleaning.impute_nulls_by_group_using_mode(
+    df,
+    group_columns=['Status', 'Source'],
+    target_column='Loss Reason'
+)
+
+# Impute using median of each group
+df_cleaned = data_cleaning.impute_nulls_by_group_using_median(
+    df,
+    group_columns=['Status', 'Source'],
+    target_column='Price'
+)
+```
+
+<Note>
+  Group-based imputation is more sophisticated and preserves relationships between features better than global imputation.
+</Note>
+
+## Cleaned Data Output
+
+The preprocessing pipeline produces:
+- `data/interim/leads_data_cleaned.csv` - Cleaned leads data
+- `data/interim/full_dataset.csv` - Merged but not fully preprocessed
+- `data/processed/full_dataset.csv` - Final cleaned and preprocessed dataset
+
+## Summary
+
+The data cleaning pipeline:
+1. Removes rows with null values in critical columns (Id)
+2. Drops columns with excessive missing data (>80% null)
+3. Applies conditional imputation to `Loss Reason` based on `Status`
+4. Fills categorical columns with mode
+5. Fills numerical columns with mean
+6. Removes duplicate rows (if any)
+7. Eliminates zero-variance predictors
+
+This ensures a clean, complete dataset ready for [feature engineering](/data/feature-engineering).

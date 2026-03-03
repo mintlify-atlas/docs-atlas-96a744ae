@@ -1,0 +1,473 @@
+---
+title: Data Preprocessing Pipeline
+description: Detailed explanation of the preprocessing transformations and feature engineering steps
+---
+
+## Pipeline Overview
+
+The preprocessing pipeline transforms raw sales data into a clean, model-ready dataset through a series of systematic transformations. The complete process is implemented in `src/data/data_preprocessing.py`.
+
+<Steps>
+  <Step title="Data Loading">
+    Load raw CSV files from `data/raw/` directory
+  </Step>
+  <Step title="Data Cleaning">
+    Remove null values, drop irrelevant columns
+  </Step>
+  <Step title="Data Fusion">
+    Merge leads and offers datasets
+  </Step>
+  <Step title="Feature Engineering">
+    Extract temporal features, handle missing values
+  </Step>
+  <Step title="Target Mapping">
+    Consolidate minority classes
+  </Step>
+  <Step title="Encoding">
+    Transform categorical variables to numerical format
+  </Step>
+  <Step title="Output">
+    Save processed dataset to `data/processed/full_dataset.csv`
+  </Step>
+</Steps>
+
+## Step 1: Data Loading
+
+The pipeline begins by loading the two raw datasets:
+
+```python
+import pandas as pd
+
+# Load raw datasets
+leads_data = pd.read_csv("data/raw/leads.csv")
+offers_data = pd.read_csv("data/raw/offers.csv")
+```
+
+**File locations:**
+- `data/raw/leads.csv` - All potential clients
+- `data/raw/offers.csv` - Clients who reached demo stage
+
+## Step 2: Data Cleaning
+
+### Leads Dataset Cleaning
+
+The leads dataset undergoes initial cleaning to ensure data quality and remove redundancy:
+
+```python
+# Delete rows with null values in the 'Id' column
+leads_data_cleaned = leads_data.dropna(subset=['Id'])
+
+# Drop multiple columns
+leads_data_cleaned = leads_data_cleaned.drop([
+    'First Name',      # Irrelevant PII
+    'Use Case',        # Duplicates offers.csv field
+    'Created Date',    # Duplicates offers.csv field
+    'Status',          # Refers to offers.csv Status
+    'Converted'        # Less granular than offers.csv Status
+], axis=1)
+```
+
+<Info>
+The cleaned leads dataset is saved to `data/interim/leads_data_cleaned.csv` for inspection and debugging.
+</Info>
+
+**Rationale for dropped columns:**
+
+<Tabs>
+  <Tab title="First Name">
+    **Reason:** Personally identifiable information (PII) with no predictive value.
+    
+    Individual names don't generalize to predict conversion patterns.
+  </Tab>
+  
+  <Tab title="Use Case / Created Date">
+    **Reason:** Duplicate information.
+    
+    These fields exist in both datasets. The offers.csv versions are kept as they represent the offer-stage data, which is closer to the conversion decision.
+  </Tab>
+  
+  <Tab title="Status / Converted">
+    **Reason:** Target variable redundancy.
+    
+    The Status field from offers.csv provides more detailed outcome information (Closed Won, Closed Lost, Other) compared to the binary Converted field.
+  </Tab>
+</Tabs>
+
+## Step 3: Data Fusion
+
+The cleaned datasets are merged using a left join:
+
+```python
+# Merge the datasets using the 'Id' column as a key
+full_dataset = pd.merge(offers_data, leads_data_cleaned, on='Id', how='left')
+full_dataset.to_csv("data/interim/full_dataset.csv", index=False)
+```
+
+<Note>
+**Left join strategy:** All records from offers_data are retained. This ensures every offer is included in the model, even if lead information is missing (handled through imputation).
+</Note>
+
+### Post-Merge Cleanup
+
+After merging, additional columns are removed:
+
+```python
+# Drop columns with excessive missing data or no predictive value
+full_dataset_preprocessed = full_dataset.drop([
+    'Id',                        # Not predictive
+    'Discarded/Nurturing Reason', # >80% null values
+    'Acquisition Campaign'        # >80% null values
+], axis=1)
+```
+
+<Warning>
+Columns with more than 80% null values are dropped as the missing data is too significant to provide reliable information for modeling.
+</Warning>
+
+## Step 4: Feature Engineering
+
+### Temporal Feature Extraction
+
+Date fields are parsed and decomposed into temporal components:
+
+```python
+# Parse dates
+full_dataset_preprocessed['Created Date'] = pd.to_datetime(
+    full_dataset_preprocessed['Created Date'], 
+    format="%Y-%m-%d"
+)
+full_dataset_preprocessed['Close Date'] = pd.to_datetime(
+    full_dataset_preprocessed['Close Date'], 
+    format="%Y-%m-%d"
+)
+
+# Extract temporal features
+full_dataset_preprocessed['Created Year'] = full_dataset_preprocessed['Created Date'].dt.year
+full_dataset_preprocessed['Created Month'] = full_dataset_preprocessed['Created Date'].dt.month
+full_dataset_preprocessed['Close Year'] = full_dataset_preprocessed['Close Date'].dt.year
+full_dataset_preprocessed['Close Month'] = full_dataset_preprocessed['Close Date'].dt.month
+
+# Drop original date columns
+full_dataset_preprocessed = full_dataset_preprocessed.drop(
+    ['Created Date', 'Close Date'], 
+    axis=1
+)
+```
+
+**Benefits of temporal decomposition:**
+- Captures seasonality patterns (monthly trends)
+- Captures yearly trends
+- Converts dates to numerical format for ML algorithms
+- Maintains temporal information without high cardinality
+
+### Missing Value Imputation
+
+#### Loss Reason - Conditional Imputation
+
+Special logic handles the Loss Reason field based on Status:
+
+```python
+# If 'Status' is 'Closed Lost' and Loss Reason is null, fill with 'no response'
+full_dataset_preprocessed['Loss Reason'] = np.where(
+    (full_dataset_preprocessed['Status'] == 'Closed Lost') & 
+    (full_dataset_preprocessed['Loss Reason'].isnull()),
+    'no response',
+    full_dataset_preprocessed['Loss Reason']
+)
+
+# If 'Status' is 'Closed Won', fill with mode for 'Closed Won' cases
+mode_closed_won = full_dataset_preprocessed.loc[
+    full_dataset_preprocessed['Status'] == 'Closed Won', 
+    'Loss Reason'
+].mode()[0]
+full_dataset_preprocessed['Loss Reason'].fillna(mode_closed_won, inplace=True)
+```
+
+<AccordionGroup>
+  <Accordion title="Why conditional imputation?">
+    Loss Reason has different semantics based on the outcome:
+    
+    - **Closed Lost:** Missing Loss Reason likely means "no response" from the client
+    - **Closed Won:** Use the most common Loss Reason value from other won cases (though this is somewhat paradoxical, it maintains data completeness)
+    
+    This context-aware imputation preserves the relationship between Status and Loss Reason.
+  </Accordion>
+</AccordionGroup>
+
+#### General Imputation Strategy
+
+Remaining missing values are handled automatically by data type:
+
+```python
+for col in full_dataset_preprocessed.columns:
+    # Categorical and datetime columns → mode
+    if full_dataset_preprocessed[col].dtype in ['object', 'datetime64[ns]']:
+        full_dataset_preprocessed[col] = full_dataset_preprocessed[col].fillna(
+            full_dataset_preprocessed[col].mode()[0]
+        )
+    # Numerical columns → mean
+    elif full_dataset_preprocessed[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+        full_dataset_preprocessed[col] = full_dataset_preprocessed[col].fillna(
+            full_dataset_preprocessed[col].mean()
+        )
+```
+
+<CardGroup cols={2}>
+  <Card title="Categorical Features" icon="list">
+    **Imputation:** Mode (most frequent value)
+    
+    Preserves the distribution of categorical variables.
+  </Card>
+  
+  <Card title="Numerical Features" icon="hashtag">
+    **Imputation:** Mean (average value)
+    
+    Maintains the central tendency of continuous variables.
+  </Card>
+</CardGroup>
+
+## Step 5: Target Variable Mapping
+
+To address class imbalance, minority classes in the Status field are consolidated:
+
+```python
+# Define mapping for main classes
+clase_mapping = {
+    'Closed Won': 'Closed Won',
+    'Closed Lost': 'Closed Lost'
+}
+
+# Assign 'Other' to all classes not in the mapping
+full_dataset_preprocessed['Status'] = full_dataset_preprocessed['Status'].map(
+    clase_mapping
+).fillna('Other')
+```
+
+**Result:** Three-class target variable:
+- **Closed Won** - Successful conversions
+- **Closed Lost** - Failed conversions
+- **Other** - All minority status categories
+
+<Info>
+This transformation addresses class imbalance while preserving the critical distinction between won and lost opportunities.
+</Info>
+
+## Step 6: Label Encoding
+
+All categorical variables are transformed to numerical format using Label Encoding:
+
+```python
+from sklearn.preprocessing import LabelEncoder
+
+# Create encoder instance
+label_encoder = LabelEncoder()
+
+# Select categorical columns
+categorical_columns = full_dataset_preprocessed.select_dtypes(
+    ['object', 'datetime64[ns]']
+).columns
+categorical_columns = list(set(categorical_columns))
+
+# Apply LabelEncoder to each categorical column
+for column in categorical_columns:
+    if column in full_dataset_preprocessed.columns:
+        full_dataset_preprocessed[column] = label_encoder.fit_transform(
+            full_dataset_preprocessed[column]
+        )
+```
+
+**Encoded columns:**
+- Source
+- City
+- Use Case
+- Pain
+- Loss Reason
+- Status (target variable)
+- Discount code (treated as categorical)
+
+<Warning>
+**Important:** Each column gets its own encoder instance via `fit_transform()`. This means the encoding is independent per column, which is suitable for tree-based models like Gradient Boosting.
+
+For production deployment, encoders should be saved and reused to ensure consistent encoding of new data.
+</Warning>
+
+## Step 7: Final Output
+
+The fully preprocessed dataset is saved:
+
+```python
+full_dataset_preprocessed.to_csv("data/processed/full_dataset.csv", index=False)
+```
+
+**Output location:** `data/processed/full_dataset.csv`
+
+This file is ready for model training with:
+- No missing values
+- All categorical variables encoded
+- Temporal features extracted
+- Target variable properly formatted
+- No irrelevant or redundant columns
+
+## Model Training Pipeline Integration
+
+The preprocessed data feeds into the model training pipeline:
+
+```python
+# From src/models/train_model.py
+
+# Load processed dataset
+data = pd.read_csv("data/processed/full_dataset.csv")
+
+# Split features and target
+class_label = 'Status'
+X = data.drop([class_label], axis=1)
+y = data[class_label]
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, 
+    random_state=42, 
+    shuffle=True, 
+    test_size=0.2
+)
+
+# Additional scaling in pipeline
+ct = ColumnTransformer([
+    ('se', StandardScaler(), ['Price', 'Discount code'])
+], remainder='passthrough')
+
+pipeline = Pipeline([
+    ('transformer', ct),
+    ('model', GradientBoostingClassifier(random_state=42))
+])
+```
+
+<Note>
+**Additional preprocessing at training time:** Numerical features (Price, Discount code) are scaled using StandardScaler within the model pipeline. This ensures proper scaling is applied during both training and inference.
+</Note>
+
+## Complete Preprocessing Summary
+
+<Tabs>
+  <Tab title="Transformations">
+    | Operation | Details |
+    |-----------|----------|
+    | **Null Handling** | Drop rows with null Id; impute other nulls |
+    | **Column Removal** | Drop 8 columns (PII, duplicates, high nulls) |
+    | **Data Fusion** | Left join offers → leads on Id |
+    | **Temporal Features** | Extract year/month from dates |
+    | **Target Mapping** | 3-class Status (Closed Won/Lost/Other) |
+    | **Encoding** | Label encode all categorical features |
+    | **Scaling** | StandardScaler for Price, Discount code |
+  </Tab>
+  
+  <Tab title="Data Flow">
+    ```
+    data/raw/leads.csv (9 columns)
+           ↓
+    [Clean: drop nulls, drop 5 columns]
+           ↓
+    data/interim/leads_data_cleaned.csv (4 columns)
+           ↓
+    [Merge with offers.csv]
+           ↓
+    data/interim/full_dataset.csv (13 columns)
+           ↓
+    [Drop 3 columns, engineer 4 temporal features]
+           ↓
+    [Impute nulls, map Status, encode categoricals]
+           ↓
+    data/processed/full_dataset.csv (14 columns)
+           ↓
+    [Model training with additional scaling]
+    ```
+  </Tab>
+  
+  <Tab title="Final Features">
+    **Numerical (6 features):**
+    - Price (scaled)
+    - Discount code (scaled)
+    - Created Year
+    - Created Month
+    - Close Year
+    - Close Month
+    
+    **Categorical Encoded (5 features):**
+    - Use Case
+    - Source
+    - City
+    - Pain
+    - Loss Reason
+    
+    **Target (1 variable):**
+    - Status (0=Closed Lost, 1=Closed Won, 2=Other)
+    
+    **Total: 11 features + 1 target**
+  </Tab>
+</Tabs>
+
+## Data Cleaning Utilities
+
+The `src/data/data_cleaning.py` module provides a reusable `DataCleaning` class with methods for common preprocessing tasks:
+
+<AccordionGroup>
+  <Accordion title="load_dataset()">
+    ```python
+    def load_dataset(self, dataset_path):
+        """Load dataset and save them as dataframes."""
+        dataframe = pd.read_csv(f"{self.main_path}/{dataset_path}")
+        return dataframe
+    ```
+    Loads CSV files from specified paths.
+  </Accordion>
+  
+  <Accordion title="inspect_dataset()">
+    ```python
+    def inspect_dataset(self, dataframe):
+        """Inspect information from dataset"""
+        print(dataframe.shape)
+        print(dataframe.head())
+        dataframe.info()
+        print(dataframe.isnull().sum())
+    ```
+    Comprehensive dataset inspection including shape, preview, types, and null counts.
+  </Accordion>
+  
+  <Accordion title="handle_missing_values()">
+    ```python
+    def handle_missing_values(self, dataframe, columns, method='drop'):
+        """Handle null values in a DataFrame.
+        
+        Parameters:
+            method: 'drop', 'mean', 'median', or 'mode'
+        """
+    ```
+    Flexible missing value handling with multiple strategies.
+  </Accordion>
+  
+  <Accordion title="drop_columns()">
+    ```python
+    def drop_columns(self, dataframe, columns_to_drop):
+        """Remove specific columns from a DataFrame."""
+        return dataframe.drop(columns=columns_to_drop, errors='ignore')
+    ```
+    Safely remove specified columns.
+  </Accordion>
+</AccordionGroup>
+
+## Running the Preprocessing Pipeline
+
+To execute the preprocessing pipeline:
+
+```bash
+python3 src.data.data_preprocessing.py
+```
+
+This generates:
+- `data/interim/leads_data_cleaned.csv`
+- `data/interim/full_dataset.csv`
+- `data/processed/full_dataset.csv` (final output)
+
+<Card title="Next: Model Training" icon="brain" href="/training/overview">
+  Learn how to train and evaluate the lead scoring models
+</Card>

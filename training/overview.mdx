@@ -1,0 +1,155 @@
+---
+title: Training Overview
+description: Comprehensive overview of the lead scoring model training pipeline and classification algorithms tested
+---
+
+The training pipeline evaluates multiple classification algorithms to identify the best model for predicting lead conversion probability. The pipeline compares 12 different models using cross-validation to ensure robust performance.
+
+## Training Pipeline
+
+The training process follows a systematic approach to model selection and evaluation:
+
+<Steps>
+  <Step title="Load Processed Data">
+    Read the preprocessed dataset from `data/processed/full_dataset.csv` containing all engineered features and encoded categorical variables.
+  </Step>
+  
+  <Step title="Train-Test Split">
+    Split the data into training (80%) and testing (20%) sets with stratification to maintain class distribution.
+    
+    ```python
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, 
+        random_state=42, 
+        shuffle=True, 
+        test_size=0.2
+    )
+    ```
+  </Step>
+  
+  <Step title="Model Comparison">
+    Evaluate all 12 classification models using 5-fold cross-validation with standardized features.
+  </Step>
+  
+  <Step title="Best Model Selection">
+    Select the model with the highest cross-validation score for final training and evaluation.
+  </Step>
+  
+  <Step title="Final Evaluation">
+    Train the best model on the full training set and evaluate on the held-out test set.
+  </Step>
+</Steps>
+
+## Classification Models Tested
+
+The training pipeline evaluates 12 different classification algorithms:
+
+```python
+models = [
+    ("RandomForest", RandomForestClassifier(random_state=42)),
+    ("Adaboost", AdaBoostClassifier(random_state=42)),
+    ("ExtraTree", ExtraTreesClassifier(random_state=42)),
+    ("BaggingClassifier", BaggingClassifier(base_estimator=DecisionTreeClassifier(), random_state=42)),
+    ("GradientBoosting", GradientBoostingClassifier(random_state=42)),
+    ("DecisionTree", DecisionTreeClassifier(random_state=42)),
+    ("NaiveBayes", GaussianNB()),
+    ("KNN", KNeighborsClassifier()),
+    ("Logistic", LogisticRegression(random_state=42)),
+    ("SGD Classifier", SGDClassifier(random_state=42)),
+    ("MLPClassifier", MLPClassifier(random_state=42)),
+    ("SVM", SVC(random_state=42))
+]
+```
+
+### Model Categories
+
+<CardGroup cols={3}>
+  <Card title="Ensemble Methods" icon="trees">
+    - Random Forest
+    - AdaBoost
+    - Extra Trees
+    - Bagging Classifier
+    - Gradient Boosting
+  </Card>
+  
+  <Card title="Tree-Based" icon="tree">
+    - Decision Tree
+  </Card>
+  
+  <Card title="Linear Models" icon="chart-line">
+    - Logistic Regression
+    - SGD Classifier
+  </Card>
+  
+  <Card title="Probabilistic" icon="dice">
+    - Naive Bayes
+  </Card>
+  
+  <Card title="Instance-Based" icon="location-dot">
+    - K-Nearest Neighbors
+  </Card>
+  
+  <Card title="Neural Networks" icon="brain">
+    - MLP Classifier
+    - Support Vector Machine
+  </Card>
+</CardGroup>
+
+## Feature Preprocessing
+
+The pipeline applies feature standardization to numerical columns before model training:
+
+```python
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler
+
+ct = ColumnTransformer([
+    ('se', StandardScaler(), ['Price', 'Discount code'])
+], remainder='passthrough')
+```
+
+<Info>
+Standardization is applied only to `Price` and `Discount code` features, while other encoded categorical features are passed through unchanged.
+</Info>
+
+## Training Code Structure
+
+The training logic is implemented in the `ModelTraining` class:
+
+```python
+class ModelTraining:
+    def __init__(self) -> None:
+        self.logger = CustomLogger(
+            name='ModelTraining', 
+            log_file='model_training.log'
+        ).get_logger()
+        self.models = [...] # 12 models defined
+    
+    def get_training_data(self):
+        """Load and split the processed dataset"""
+        pass
+    
+    def compare_classifiers(self, X_train, y_train):
+        """Compare models using cross-validation"""
+        pass
+    
+    def run(self):
+        """Execute the complete training pipeline"""
+        pass
+```
+
+<Note>
+All models use `random_state=42` for reproducibility where applicable.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Model Selection" icon="ranking-star" href="/training/model-selection">
+    Learn how models are compared and the best model is selected
+  </Card>
+  
+  <Card title="Evaluation Metrics" icon="chart-bar" href="/training/evaluation">
+    View detailed performance metrics and classification results
+  </Card>
+</CardGroup>

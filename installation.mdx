@@ -1,0 +1,216 @@
+---
+title: Installation
+description: Set up the Lead Scoring Model in your environment
+---
+
+## System Requirements
+
+Before installing the Lead Scoring Model, ensure your system meets these requirements:
+
+- **Python**: Version 3.7 or higher
+- **pip**: Latest version recommended
+- **Operating System**: Linux, macOS, or Windows
+- **Memory**: At least 4GB RAM for model training
+- **Storage**: 500MB for dependencies and data
+
+## Clone the Repository
+
+First, clone the project repository to your local machine:
+
+```bash
+git clone <repository-url>
+cd lead-scoring-model
+```
+
+## Install Dependencies
+
+The project uses several Python libraries for data processing, machine learning, and visualization.
+
+<Steps>
+  <Step title="Create a virtual environment (recommended)">
+    Create and activate a virtual environment to isolate project dependencies:
+
+    <CodeGroup>
+    ```bash macOS/Linux
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+
+    ```bash Windows
+    python -m venv venv
+    venv\Scripts\activate
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Install required packages">
+    Install all dependencies from `requirements.txt`:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    This installs the following packages:
+
+    - **matplotlib** (3.7.2) - Data visualization
+    - **missingno** (0.5.2) - Missing data visualization
+    - **numpy** (1.23.5) - Numerical computing
+    - **pandas** (2.1.4) - Data manipulation and analysis
+    - **scikit-learn** (1.3.0) - Machine learning algorithms
+    - **seaborn** (0.13.0) - Statistical data visualization
+    - **shimoku-api-python** (1.4.1) - Dashboard integration
+  </Step>
+
+  <Step title="Verify installation">
+    Confirm all packages installed correctly:
+
+    ```bash
+    pip list
+    ```
+
+    You should see all the packages listed above in the output.
+  </Step>
+</Steps>
+
+<Note>
+  The scikit-learn package provides all 12 classification algorithms used in model comparison, including Gradient Boosting, Random Forest, SVM, and Neural Networks.
+</Note>
+
+## Project Structure
+
+After installation, your project directory should look like this:
+
+```text
+.
+├── README.md
+├── data
+│   ├── interim          # Intermediate processing files
+│   ├── processed        # Final processed datasets
+│   └── raw              # Original leads.csv and offers.csv
+├── models               # Saved model artifacts
+├── notebooks
+│   └── data_preprocessing.ipynb
+├── reports
+│   ├── leads_report.html
+│   ├── model_training.log
+│   └── offers_report.html
+├── requirements.txt
+└── src
+    ├── app.py           # Shimoku dashboard application
+    ├── data
+    │   ├── data_preprocessing.py
+    │   └── data_cleaning.py
+    ├── models
+    │   ├── __init__.py
+    │   └── train_model.py
+    └── utils
+        └── logger.py
+```
+
+## Prepare Your Data
+
+The model requires two CSV files to be placed in the `data/raw/` directory:
+
+<Steps>
+  <Step title="Add leads.csv">
+    This file should contain lead information with these columns:
+    
+    - **Id**: Unique identifier for the lead
+    - **First Name**: Lead's first name
+    - **Use Case**: Type of use case for the potential client
+    - **Source**: Lead source (e.g., Inbound, Outbound)
+    - **Status**: Current status of the lead
+    - **Discarded/Nurturing Reason**: Reason for lead discard or nurturing
+    - **Acquisition Campaign**: Acquisition campaign that generated the lead
+    - **Created Date**: Lead creation date
+    - **Converted**: Target variable (1 = converted, 0 = not converted)
+    - **City**: City of the lead
+  </Step>
+
+  <Step title="Add offers.csv">
+    This file should contain offer information with these columns:
+    
+    - **Id**: Unique identifier for the offer
+    - **Use Case**: Type of use case for the offer
+    - **Status**: Current status of the offer (Closed Won, Closed Lost, etc.)
+    - **Created Date**: Offer creation date
+    - **Close Date**: Offer closing date
+    - **Price**: Offer price
+    - **Discount code**: Applied discount code
+    - **Pain**: Customer potential's pain level
+    - **Loss Reason**: Reason for offer loss
+  </Step>
+</Steps>
+
+<Warning>
+  Ensure both CSV files contain the `Id` column for proper data fusion. The preprocessing script will merge these datasets using this unique identifier.
+</Warning>
+
+## Optional: Shimoku Dashboard Setup
+
+If you want to use the dashboard visualization features, configure your Shimoku API credentials:
+
+```bash
+export SHIMOKU_TOKEN="your_access_token"
+export SHIMOKU_UNIVERSE_ID="your_universe_id"
+export SHIMOKU_WORKSPACE_ID="your_workspace_id"
+```
+
+You can obtain these credentials from your [Shimoku account settings](https://shimoku.io).
+
+## Verify Installation
+
+Test that everything is set up correctly:
+
+```bash
+python3 -c "import pandas, sklearn, numpy; print('Installation successful!')"
+```
+
+If you see "Installation successful!", you're ready to proceed to the [quickstart guide](/quickstart).
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ImportError: No module named 'sklearn'">
+    This means scikit-learn wasn't installed correctly. Try:
+    
+    ```bash
+    pip install --upgrade scikit-learn==1.3.0
+    ```
+  </Accordion>
+
+  <Accordion title="Version conflicts with numpy">
+    If you encounter version conflicts, install the exact versions specified:
+    
+    ```bash
+    pip install numpy==1.23.5 --force-reinstall
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied errors">
+    On macOS/Linux, you may need to use `pip3` instead of `pip`:
+    
+    ```bash
+    pip3 install -r requirements.txt
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart Guide"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Train your first model and make predictions
+  </Card>
+  <Card
+    title="Data Preprocessing"
+    icon="filter"
+    href="/quickstart#data-preprocessing"
+  >
+    Learn about the data preparation pipeline
+  </Card>
+</CardGroup>

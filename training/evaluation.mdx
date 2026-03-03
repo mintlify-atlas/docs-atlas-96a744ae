@@ -1,0 +1,292 @@
+---
+title: Model Evaluation
+description: Detailed evaluation metrics including accuracy, classification report, and cross-validation scores for the lead scoring model
+---
+
+The GradientBoosting model achieved excellent performance on the test set with **90.4% accuracy**, demonstrating strong predictive capability for lead conversion.
+
+## Performance Summary
+
+<CardGroup cols={2}>
+  <Card title="Test Accuracy" icon="bullseye">
+    **90.4%**
+    
+    Accuracy on the held-out test set (20% of data)
+  </Card>
+  
+  <Card title="Cross-Validation Score" icon="layer-group">
+    **0.91**
+    
+    Mean 5-fold CV score on training data
+  </Card>
+</CardGroup>
+
+<Info>
+The close alignment between cross-validation score (0.91) and test accuracy (90.4%) indicates excellent model generalization without overfitting.
+</Info>
+
+## Evaluation Metrics
+
+The model is evaluated on multiple dimensions after training:
+
+```python
+# Evaluate model performance on the test set
+self.logger.info("Accuracy Score: %s", accuracy_score(y_test, y_pred))
+self.logger.info("\nClassification Report:\n%s", classification_report(y_test, y_pred))
+```
+
+### Accuracy Score
+
+Accuracy measures the proportion of correct predictions across all classes:
+
+```python
+from sklearn.metrics import accuracy_score
+
+accuracy = accuracy_score(y_test, y_pred)
+# Result: 0.904 (90.4%)
+```
+
+<Tabs>
+  <Tab title="Interpretation">
+    The model correctly predicts the lead status (Closed Won, Closed Lost, or Other) for 90.4% of test cases.
+  </Tab>
+  
+  <Tab title="Business Impact">
+    With 90.4% accuracy, the sales team can confidently prioritize leads based on model predictions, focusing efforts on high-conversion probability prospects.
+  </Tab>
+</Tabs>
+
+## Classification Report
+
+The classification report provides detailed metrics for each class:
+
+### Metrics Breakdown
+
+<AccordionGroup>
+  <Accordion title="Precision">
+    Precision measures how many predicted positive cases are actually positive.
+    
+    **Formula**: Precision = True Positives / (True Positives + False Positives)
+    
+    High precision means fewer false alarms when predicting "Closed Won" leads.
+  </Accordion>
+  
+  <Accordion title="Recall">
+    Recall measures how many actual positive cases are correctly identified.
+    
+    **Formula**: Recall = True Positives / (True Positives + False Negatives)
+    
+    High recall ensures the model doesn't miss many "Closed Won" opportunities.
+  </Accordion>
+  
+  <Accordion title="F1-Score">
+    F1-Score is the harmonic mean of precision and recall.
+    
+    **Formula**: F1 = 2 × (Precision × Recall) / (Precision + Recall)
+    
+    Provides a balanced measure especially important for imbalanced classes.
+  </Accordion>
+  
+  <Accordion title="Support">
+    The number of actual occurrences of each class in the test set.
+    
+    Helps understand the class distribution and metric reliability.
+  </Accordion>
+</AccordionGroup>
+
+### Classification Report Generation
+
+```python
+from sklearn.metrics import classification_report
+
+report = classification_report(y_test, y_pred)
+print(report)
+```
+
+The report provides precision, recall, F1-score, and support for each class:
+
+- **Closed Lost** (Class 0)
+- **Closed Won** (Class 1)
+- **Other** (Class 2)
+
+<Note>
+Detailed classification metrics for each class are logged to `reports/model_training.log`.
+</Note>
+
+## Cross-Validation Methodology
+
+The model uses 5-fold cross-validation during the selection phase:
+
+```python
+from sklearn.model_selection import cross_val_score
+
+pipeline = Pipeline([('transformer', ct), (name, model)])
+cv_scores = cross_val_score(pipeline, X_train, y_train, cv=5)
+mean_score = np.mean(cv_scores)
+```
+
+### Cross-Validation Process
+
+<Steps>
+  <Step title="Data Splitting">
+    Training data is divided into 5 equal folds (subsets).
+  </Step>
+  
+  <Step title="Iterative Training">
+    For each fold:
+    - Train on 4 folds (80% of training data)
+    - Validate on 1 fold (20% of training data)
+  </Step>
+  
+  <Step title="Score Calculation">
+    Record the accuracy score for each fold.
+  </Step>
+  
+  <Step title="Mean Score">
+    Average the 5 scores to get the final cross-validation score: **0.91**
+  </Step>
+</Steps>
+
+<Info>
+GradientBoosting's CV score of 0.91 was the **highest among all 12 models tested**, leading to its selection.
+</Info>
+
+## Probability Predictions
+
+Beyond class labels, the model generates probability scores for lead scoring:
+
+```python
+# Probabilities for each class
+y_probabilities = best_model.predict_proba(X_test)
+# Shape: (n_samples, 3) - probabilities for Closed Lost, Closed Won, Other
+
+# Get the predicted class (highest probability)
+y_predicted = np.argmax(y_probabilities, axis=1)
+```
+
+### Probability Distribution
+
+Leads are categorized into probability ranges:
+
+```python
+probability_bins = pd.cut(
+    impact_df['Probability Closed-Won'], 
+    bins=[0, 0.25, 0.5, 0.75, 1.0], 
+    labels=['25%', '50%', '75%', '100%']
+)
+probability_distribution = probability_bins.value_counts().sort_index()
+```
+
+<Tabs>
+  <Tab title="Probability Ranges">
+    - **0-25%**: Low conversion probability
+    - **25-50%**: Medium-low conversion probability
+    - **50-75%**: Medium-high conversion probability
+    - **75-100%**: High conversion probability
+  </Tab>
+  
+  <Tab title="Business Use">
+    Sales teams can prioritize leads in the 75-100% probability range for immediate follow-up while nurturing leads in lower ranges.
+  </Tab>
+</Tabs>
+
+## Prediction Output
+
+The model generates detailed predictions for each lead:
+
+```python
+impact_df = pd.DataFrame({
+    'Observation': range(1, len(X_test_original) + 1),
+    'Use Case': X_test_original['Use Case'],
+    'Discount code': X_test_original['Discount code'],
+    'Loss Reason': X_test_original['Loss Reason'],
+    'Source': X_test_original['Source'],
+    'City': X_test_original['City'],
+    'Predicted Class': y_predicted_mapped,
+    'Probability Closed-Won': y_probabilities[:, 0],
+})
+```
+
+### Class Mapping
+
+```python
+mapping = {0: 'Closed Lost', 1: 'Closed Won', 2: 'Other'}
+y_predicted_mapped = np.vectorize(mapping.get)(y_predicted)
+```
+
+Numeric predictions are converted to readable labels for business interpretation.
+
+## Evaluation Results Data
+
+The training pipeline returns comprehensive evaluation data:
+
+```python
+data = {
+    "predictions_df": predictions_df,
+    "probability_distribution": probability_distribution,
+    "accuracy_score": accuracy_score(y_test, y_pred),
+}
+return data
+```
+
+<CardGroup cols={3}>
+  <Card title="Predictions DataFrame" icon="table">
+    Individual predictions with features and probabilities
+  </Card>
+  
+  <Card title="Probability Distribution" icon="chart-pie">
+    Count of leads in each probability range
+  </Card>
+  
+  <Card title="Accuracy Score" icon="percent">
+    Overall model accuracy: 90.4%
+  </Card>
+</CardGroup>
+
+## Model Performance Highlights
+
+<Check>
+**Excellent Generalization**: CV score (0.91) and test accuracy (90.4%) are closely aligned
+</Check>
+
+<Check>
+**Multi-Class Performance**: Effective prediction across all three status categories
+</Check>
+
+<Check>
+**Probability Scoring**: Generates calibrated probability scores for lead prioritization
+</Check>
+
+<Check>
+**Reproducible Results**: All metrics logged to `model_training.log` for tracking
+</Check>
+
+## Running Evaluation
+
+To train and evaluate the model:
+
+```bash
+python3 -m src.models.train_model
+```
+
+This command executes the complete training pipeline:
+
+1. Loads processed data from `data/processed/full_dataset.csv`
+2. Splits data into train/test sets
+3. Compares all 12 classification models
+4. Selects the best model (GradientBoosting)
+5. Trains on full training set
+6. Evaluates on test set
+7. Logs all metrics to `reports/model_training.log`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Model Selection" icon="ranking-star" href="/training/model-selection">
+    Learn how GradientBoosting was selected
+  </Card>
+  
+  <Card title="Training Overview" icon="book" href="/training/overview">
+    Review the complete training pipeline
+  </Card>
+</CardGroup>

@@ -1,0 +1,112 @@
+---
+title: Making Predictions
+description: Learn how to generate lead conversion predictions using the trained Gradient Boosting model
+---
+
+Once the model is trained, you can generate predictions for new leads to estimate their conversion probability. The prediction process outputs both class labels and probability scores.
+
+## Prediction Workflow
+
+<Steps>
+  <Step title="Load Test Data">
+    The model uses the test set split from the processed dataset to generate predictions.
+
+    ```python
+    # From train_model.py:70-89
+    def get_training_data(self):
+        # Read processed dataset
+        data = pd.read_csv("data/processed/full_dataset.csv")
+
+        # Split data
+        class_label = 'Status'
+        X = data.drop([class_label], axis=1)
+        y = data[class_label]
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, random_state=42, shuffle=True, test_size=0.2
+        )
+
+        return X_train, X_test, y_train, y_test
+    ```
+  </Step>
+
+  <Step title="Generate Predictions">
+    The best performing model (Gradient Boosting) generates both class predictions and probability scores.
+
+    ```python
+    # From train_model.py:175-181
+    best_model.fit(X_train, y_train)
+    y_pred = best_model.predict(X_test)
+
+    # Probabilities
+    y_probabilities = best_model.predict_proba(X_test)
+    y_predicted = np.argmax(y_probabilities, axis=1)
+    predictions_df, probability_distribution = self.get_lead_distribution(
+        X_test, y_predicted, y_probabilities
+    )
+    ```
+  </Step>
+
+  <Step title="Map Predictions to Classes">
+    The numeric predictions are mapped to human-readable class labels.
+
+    ```python
+    # From train_model.py:129-133
+    # Diccionario de mapeo
+    mapping = {0: 'Closed Lost', 1: 'Closed Won', 2: 'Other'}
+
+    # Aplicar el mapeo a y_predicted
+    y_predicted_mapped = np.vectorize(mapping.get)(y_predicted)
+    ```
+  </Step>
+
+  <Step title="Create Results DataFrame">
+    The predictions are combined with original lead features into a comprehensive results table.
+
+    ```python
+    # From train_model.py:136-145
+    impact_df = pd.DataFrame({
+        'Observation': range(1, len(X_test_original) + 1),
+        'Use Case': X_test_original['Use Case'],
+        'Discount code': X_test_original['Discount code'],
+        'Loss Reason': X_test_original['Loss Reason'],
+        'Source': X_test_original['Source'],
+        'City': X_test_original['City'],
+        'Predicted Class': y_predicted_mapped,
+        'Probability Closed-Won': y_probabilities[:, 0],
+    })
+    ```
+  </Step>
+</Steps>
+
+## Running Predictions
+
+To generate predictions, execute the main training pipeline:
+
+```python
+# From train_model.py:195-197
+if __name__ == "__main__":
+    trainer = ModelTraining()
+    trainer.run()
+```
+
+The `run()` method returns a dictionary containing:
+- `predictions_df`: DataFrame with predicted classes and features
+- `probability_distribution`: Distribution of probabilities across bins
+- `accuracy_score`: Model accuracy on the test set
+
+<Info>
+  The model uses `predict_proba()` to generate probability scores for each class, then selects the class with the highest probability using `np.argmax()`.
+</Info>
+
+## Output Format
+
+Each prediction includes:
+
+- **Observation**: Sequential identifier for each lead
+- **Lead Features**: Use Case, Discount code, Loss Reason, Source, City
+- **Predicted Class**: One of three categories (Closed Won, Closed Lost, Other)
+- **Probability Score**: Confidence level for the Closed-Won prediction
+
+<Note>
+  The probability score specifically represents the likelihood of "Closed Won" outcome, which is the primary metric for lead prioritization.
+</Note>

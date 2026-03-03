@@ -1,80 +1,202 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with lead scoring predictions in minutes
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before you begin, ensure you have:
 
-### Step 1: Set up your local environment
+- Python 3.7 or higher installed
+- Completed the [installation steps](/installation)
+- Raw data files (`leads.csv` and `offers.csv`) in the `data/raw/` directory
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Data Preprocessing
 
-### Step 2: Deploy your changes
+The first step is to preprocess your raw lead and offer data. This process handles data fusion, missing values, feature engineering, and encoding.
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Run the preprocessing script">
+    Execute the data preprocessing module to prepare your datasets:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    python3 src.eda.data_preprocessing.py
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    This script performs the following operations:
 
-### Step 3: Go live
+    - **Data Fusion**: Merges `leads.csv` and `offers.csv` using unique identifiers
+    - **Missing Data Handling**: 
+      - Removes rows with null IDs
+      - Imputes categorical columns with mode values
+      - Imputes numerical columns with mean values
+      - Fills `Loss Reason` based on `Status` values
+    - **Feature Engineering**:
+      - Extracts year and month from date columns
+      - Drops irrelevant columns (First Name, duplicate Use Case, etc.)
+    - **Label Encoding**: Converts categorical features to numerical format
+    - **Target Mapping**: Groups minority classes into 'Other' category
+  </Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+  <Step title="Verify processed data">
+    After preprocessing, verify that the processed dataset was created:
 
-## Next steps
+    ```bash
+    ls data/processed/
+    ```
 
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+    You should see `full_dataset.csv` containing the cleaned and encoded data.
+  </Step>
+</Steps>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The preprocessing script automatically handles class imbalance by grouping minority status classes into a new 'Other' category, creating three balanced target classes: 'Closed Won', 'Closed Lost', and 'Other'.
 </Note>
+
+## Model Training
+
+Now train and evaluate multiple classification models to find the best performer.
+
+<Steps>
+  <Step title="Train the models">
+    Run the training script to compare 12 different classifiers:
+
+    ```bash
+    python3 -m src.models.train_model
+    ```
+
+    The training process:
+    
+    1. Loads the processed dataset from `data/processed/full_dataset.csv`
+    2. Splits data into 80% training and 20% testing sets
+    3. Applies StandardScaler to numerical features (`Price` and `Discount code`)
+    4. Trains 12 models using 5-fold cross-validation
+    5. Selects the best model based on cross-validation scores
+    6. Evaluates performance on the test set
+  </Step>
+
+  <Step title="Review model performance">
+    The script outputs cross-validation scores for all models:
+
+    ```text
+    Model scores:
+    RandomForest: 0.87
+    Adaboost: 0.85
+    ExtraTree: 0.88
+    BaggingClassifier: 0.84
+    GradientBoosting: 0.91
+    DecisionTree: 0.78
+    NaiveBayes: 0.72
+    KNN: 0.81
+    Logistic: 0.83
+    SGD Classifier: 0.80
+    MLPClassifier: 0.86
+    SVM: 0.88
+    
+    Best Model: GradientBoosting with Score: 0.91
+    Accuracy Score: 0.904
+    ```
+
+    The Gradient Boosting model achieves the highest performance with 90.4% accuracy.
+  </Step>
+</Steps>
+
+## Understanding the Model Pipeline
+
+Here's how the training pipeline works under the hood:
+
+<CodeGroup>
+```python train_model.py
+# Load processed data
+data = pd.read_csv("data/processed/full_dataset.csv")
+
+# Split features and target
+class_label = 'Status'
+X = data.drop([class_label], axis=1)
+y = data[class_label]
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, 
+    random_state=42, 
+    shuffle=True, 
+    test_size=0.2
+)
+```
+
+```python preprocessing.py
+# Define column transformation with StandardScaler
+ct = ColumnTransformer([
+    ('se', StandardScaler(), ['Price', 'Discount code'])
+], remainder='passthrough')
+
+# Create pipeline
+pipeline = Pipeline([
+    ('transformer', ct), 
+    ('GradientBoosting', GradientBoostingClassifier(random_state=42))
+])
+
+# Train with cross-validation
+cv_scores = cross_val_score(pipeline, X_train, y_train, cv=5)
+```
+</CodeGroup>
+
+## Model Configuration
+
+The Gradient Boosting Classifier uses these hyperparameters:
+
+```python
+GradientBoostingClassifier(
+    random_state=42  # For reproducibility
+)
+```
+
+All models are initialized with `random_state=42` to ensure reproducible results across training runs.
+
+## Deploy with Shimoku Dashboard
+
+Visualize predictions and model performance using the Shimoku API integration.
+
+<Steps>
+  <Step title="Set environment variables">
+    Configure your Shimoku credentials:
+
+    ```bash
+    export SHIMOKU_TOKEN="your_access_token"
+    export SHIMOKU_UNIVERSE_ID="your_universe_id"
+    export SHIMOKU_WORKSPACE_ID="your_workspace_id"
+    ```
+  </Step>
+
+  <Step title="Run the application">
+    Launch the dashboard application:
+
+    ```bash
+    python3 src/app.py
+    ```
+
+    This creates an interactive dashboard displaying:
+    - Lead conversion predictions with probability scores
+    - Predicted class distribution across test data
+    - Model accuracy metrics
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Model Details"
+    icon="brain"
+    href="/training/overview"
+  >
+    Learn about the 12 classification algorithms evaluated
+  </Card>
+  <Card
+    title="Data Schema"
+    icon="database"
+    href="/concepts/data-schema"
+  >
+    Understand the input features and target variables
+  </Card>
+</CardGroup>

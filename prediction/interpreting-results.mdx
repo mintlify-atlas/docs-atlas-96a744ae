@@ -1,0 +1,132 @@
+---
+title: Interpreting Results
+description: Understand probability scores, predicted classes, and how to prioritize leads based on model output
+---
+
+The model outputs predictions in three distinct classes, each with an associated probability score. Understanding these outputs is crucial for effective lead prioritization.
+
+## Predicted Classes
+
+The model categorizes leads into three classes based on historical conversion patterns:
+
+```python
+# From train_model.py:129-133
+mapping = {0: 'Closed Lost', 1: 'Closed Won', 2: 'Other'}
+```
+
+### Class Definitions
+
+<CardGroup cols={3}>
+  <Card title="Closed Won" icon="circle-check" color="#20C69E">
+    Leads predicted to convert successfully. These are high-priority prospects with strong conversion signals.
+  </Card>
+  
+  <Card title="Closed Lost" icon="circle-xmark" color="#F86C7D">
+    Leads predicted not to convert. These may require different engagement strategies or deprioritization.
+  </Card>
+  
+  <Card title="Other" icon="circle-question" color="#F2BB67">
+    Leads with uncertain outcomes. These may still be in progress or require additional nurturing.
+  </Card>
+</CardGroup>
+
+## Color Coding
+
+The dashboard uses a consistent color scheme to visually distinguish predicted classes:
+
+```python
+# From aux.py:24-32
+def get_label_columns(table_data: pd.DataFrame) -> Dict:
+    return {
+        'Predicted Class': {
+            ("Closed Won"): '#20C69E',   # Green
+            ("Closed Lost"): '#F86C7D',  # Red
+            ("Other"): '#F2BB67',        # Yellow
+        },
+    }
+```
+
+- **Green (#20C69E)**: Closed Won - High priority
+- **Red (#F86C7D)**: Closed Lost - Low priority  
+- **Yellow (#F2BB67)**: Other - Medium priority
+
+## Probability Scores
+
+Each prediction includes a probability score indicating the model's confidence in a "Closed Won" outcome.
+
+### Probability Binning
+
+Probabilities are grouped into four quartiles for distribution analysis:
+
+```python
+# From train_model.py:149-150
+probability_bins = pd.cut(
+    impact_df['Probability Closed-Won'], 
+    bins=[0, 0.25, 0.5, 0.75, 1.0], 
+    labels=['25%', '50%', '75%', '100%']
+)
+probability_distribution = probability_bins.value_counts().sort_index()
+```
+
+<AccordionGroup>
+  <Accordion title="0-25% Probability" icon="1">
+    **Very Low Confidence** - Leads in this range are unlikely to convert. Consider deprioritizing or using alternative engagement strategies.
+  </Accordion>
+  
+  <Accordion title="25-50% Probability" icon="2">
+    **Low-Medium Confidence** - These leads show some potential but may need additional nurturing or qualification.
+  </Accordion>
+  
+  <Accordion title="50-75% Probability" icon="3">
+    **Medium-High Confidence** - Solid prospects that warrant active engagement and follow-up.
+  </Accordion>
+  
+  <Accordion title="75-100% Probability" icon="4">
+    **High Confidence** - Top-priority leads with strong conversion signals. Allocate maximum sales resources to these prospects.
+  </Accordion>
+</AccordionGroup>
+
+## Using Predictions for Lead Prioritization
+
+<Steps>
+  <Step title="Sort by Predicted Class">
+    Focus first on leads classified as "Closed Won" (green labels).
+  </Step>
+  
+  <Step title="Rank by Probability">
+    Within each class, prioritize leads with higher probability scores (closer to 100%).
+  </Step>
+  
+  <Step title="Analyze Contributing Factors">
+    Review the lead features (Use Case, Source, Discount code, etc.) to understand why certain leads scored higher.
+  </Step>
+  
+  <Step title="Allocate Resources">
+    Direct sales efforts toward high-probability "Closed Won" leads for maximum conversion efficiency.
+  </Step>
+</Steps>
+
+<Note>
+  The model calculates probabilities using `predict_proba()` from the Gradient Boosting classifier, which provides calibrated probability estimates based on the training data.
+</Note>
+
+## Prediction Output Structure
+
+The complete prediction output includes:
+
+```python
+# From train_model.py:187-192
+data = {
+    "predictions_df": predictions_df,
+    "probability_distribution": probability_distribution,
+    "accuracy_score": accuracy_score(y_test, y_pred),
+}
+```
+
+- **predictions_df**: Individual lead predictions with features and classes
+- **probability_distribution**: Aggregated count of leads in each probability quartile
+- **accuracy_score**: Overall model performance metric
+
+<Info>
+  Review the accuracy score to understand the model's reliability. Higher accuracy (closer to 1.0) indicates more trustworthy predictions.
+</Info>

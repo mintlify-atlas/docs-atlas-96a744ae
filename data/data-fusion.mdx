@@ -1,0 +1,118 @@
+---
+title: Data Fusion
+description: Learn how leads.csv and offers.csv datasets are merged to create a unified dataset for model training
+---
+
+## Overview
+
+The Lead Scoring Model uses data from two separate CSV files that reflect different phases of the sales process. Data fusion combines these datasets into a single comprehensive dataset for analysis and model training.
+
+## Source Datasets
+
+### leads.csv
+Contains data about all potential clients who have shown interest:
+- **Id**: Unique identifier for the lead
+- **First Name**: Lead's first name
+- **Use Case**: Type of use case for the potential client
+- **Source**: Lead source (e.g., Inbound, Outbound)
+- **Status**: Current status of the lead
+- **Discarded/Nurturing Reason**: Reason for lead discard or nurturing
+- **Acquisition Campaign**: Acquisition campaign that generated the lead
+- **Created Date**: Lead creation date
+- **Converted**: Whether the lead converted (1) or not (0)
+- **City**: City of the lead
+
+### offers.csv
+Contains data about clients who reached at least the demo meeting phase:
+- **Id**: Unique identifier for the offer
+- **Use Case**: Type of use case for the offer
+- **Status**: Current status of the offer (target variable)
+- **Created Date**: Offer creation date
+- **Close Date**: Offer closing date
+- **Price**: Offer price
+- **Discount code**: Applied discount code
+- **Pain**: Customer potential's pain level
+- **Loss Reason**: Reason for offer loss
+
+## Fusion Process
+
+<Steps>
+  <Step title="Load the datasets">
+    Both CSV files are loaded into pandas DataFrames:
+
+    ```python
+    leads_data = pd.read_csv("data/raw/leads.csv")
+    offers_data = pd.read_csv("data/raw/offers.csv")
+    ```
+  </Step>
+
+  <Step title="Clean the leads dataset">
+    Remove null values and redundant columns from leads data:
+
+    ```python
+    # Delete rows with null values in the 'Id' column
+    leads_data_cleaned = leads_data.dropna(subset=['Id'])
+
+    # Drop multiple columns
+    # 'First Name' is irrelevant
+    # The columns of Leads dataset such as 'Use Case' and 'Created Date' 
+    # are the same as the columns of Offers dataset
+    # The 'Status' and 'Converted' columns of Leads dataset refers to 
+    # the 'Status' column of Offers dataset
+    leads_data_cleaned = leads_data_cleaned.drop(
+        ['First Name', 'Use Case', 'Created Date', 'Status', 'Converted'], 
+        axis=1
+    )
+    ```
+
+    <Note>
+      Columns like `Use Case`, `Created Date`, `Status`, and `Converted` from leads.csv are dropped because they duplicate information already present in offers.csv.
+    </Note>
+  </Step>
+
+  <Step title="Merge the datasets">
+    Perform a left join using the `Id` column as the key:
+
+    ```python
+    # Merge the datasets using the 'Id' column as a key
+    full_dataset = pd.merge(offers_data, leads_data_cleaned, on='Id', how='left')
+    full_dataset.to_csv("data/interim/full_dataset.csv", index=False)
+    ```
+
+    This creates a unified dataset that combines offer details with lead information.
+  </Step>
+
+  <Step title="Remove high-null columns">
+    Drop columns with more than 80% missing values:
+
+    ```python
+    # Drop multiple columns
+    # 'Id' is irrelevant
+    # 'Discarded/Nurturing Reason' and 'Acquisition Campaign' have more than 80% null values.
+    # The missing data is significant and may not provide valuable information for the model.
+    full_dataset_preprocessed = full_dataset.drop(
+        ['Id', 'Discarded/Nurturing Reason', 'Acquisition Campaign'], 
+        axis=1
+    )
+    ```
+
+    <Warning>
+      Columns with excessive missing data (>80% null values) are removed as they don't provide reliable information for model training.
+    </Warning>
+  </Step>
+</Steps>
+
+## Resulting Dataset
+
+After fusion, the combined dataset contains:
+- All offer-related features (Use Case, Status, dates, Price, Discount code, Pain, Loss Reason)
+- Relevant lead information (Source, City)
+- No duplicate columns or irrelevant identifiers
+
+The fused dataset is saved to `data/interim/full_dataset.csv` for further preprocessing.
+
+## Next Steps
+
+After data fusion, the dataset undergoes:
+1. [Data Cleaning](/data/cleaning) - Handle missing values and duplicates
+2. [Feature Engineering](/data/feature-engineering) - Transform and create new features
