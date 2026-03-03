@@ -1,0 +1,93 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Lead Scoring Model",
+  "projectDescription": "A machine learning model to predict lead conversion probability for Event Management SaaS clients with 90%+ accuracy using Gradient Boosting.",
+  "theme": "palm",
+  "primaryColor": "#6366F1",
+  "lightColor": "#818CF8",
+  "darkColor": "#4F46E5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/overview",
+              "concepts/data-schema",
+              "concepts/preprocessing"
+            ]
+          },
+          {
+            "group": "Data Preparation",
+            "pages": [
+              "data/data-fusion",
+              "data/feature-engineering",
+              "data/cleaning"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Model Guide",
+        "groups": [
+          {
+            "group": "Training",
+            "pages": [
+              "training/overview",
+              "training/model-selection",
+              "training/evaluation"
+            ]
+          },
+          {
+            "group": "Prediction",
+            "pages": [
+              "prediction/making-predictions",
+              "prediction/interpreting-results",
+              "prediction/dashboard"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Modules",
+            "pages": [
+              "api/model-training",
+              "api/data-preprocessing",
+              "api/utilities"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-model comparison with 12 classification algorithms",
+    "Automated data preprocessing and feature engineering pipeline",
+    "Lead conversion prediction with probability scoring",
+    "Interactive dashboard integration with Shimoku API",
+    "Comprehensive data fusion from leads and offers datasets"
+  ],
+  "publicApiSurface": [
+    "ModelTraining",
+    "ModelTraining.get_training_data()",
+    "ModelTraining.compare_classifiers(X_train, y_train)",
+    "ModelTraining.get_lead_distribution(X_test, y_predicted, y_probabilities)",
+    "ModelTraining.run()",
+    "data_preprocessing.py",
+    "data_cleaning.py",
+    "app.py"
+  ]
+}
